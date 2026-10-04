@@ -70,12 +70,20 @@ flowchart TD
 ## Code tour: suggested reading order
 
 1. [`src/services/auth.ts`](src/services/auth.ts): a typical service. Interface, `AuthDependencies`, class, `createAuthService` factory, `init` / `dispose`, reactive state through the [`Store`](src/services/shared/store.ts) helper. No React.
-2. [`src/bootstrap/bootstrapApp.ts`](src/bootstrap/bootstrapApp.ts): the composition root. Dependencies are wired by hand in creation order, and [`createScope()`](src/services/shared/disposable.ts) records each service so teardown (or cleanup after a failed init) runs in reverse.
+2. [`src/bootstrap/bootstrapApp.ts`](src/bootstrap/bootstrapApp.ts): the composition root, in two steps. First it **wires** every service by hand (constructors only store dependencies) and writes `dispose()` in reverse creation order. Then it **initializes** them in dependency order. If an `init()` fails, it disposes everything and rethrows.
 3. [`src/main.tsx`](src/main.tsx): `bootstrapApp()` runs **before** React renders the app. React renders a spinner, an error screen, or the router. No `useEffect`.
 4. [`src/services/session.ts`](src/services/session.ts) + [`src/bootstrap/bootstrapSession.ts`](src/bootstrap/bootstrapSession.ts): the session lifecycle in plain TypeScript. It reacts to `auth`, bootstraps or disposes the session scope, and guards against races with a generation counter. `userSettings.init()` and `encounters.init()` run concurrently with `Promise.all`.
 5. [`src/react/`](src/react/): the adapters. Each hook is 3–10 lines: get the service, `useSyncExternalStore(service.subscribe, service.getState)`, return state + bound commands.
 6. [`src/routes/_authenticated.tsx`](src/routes/_authenticated.tsx): the layout just mirrors `session.getState()` (spinner / error / `<Outlet/>`). It doesn't start or stop anything.
 7. [`src/services/encounters.ts`](src/services/encounters.ts) + [`src/services/recordingSession.ts`](src/services/recordingSession.ts): a service that owns a nested scope. `encounters.dispose()` disposes the active recording first, which is the cascading teardown.
+
+## Service conventions
+
+- **Constructor:** stores dependencies and logs `created`. No timers, subscriptions or I/O.
+- **`init()`** (optional, async): side effects and async setup.
+- **`dispose()`:** undoes what `init()` did, and is safe to call even if `init()` never ran or failed.
+- **Bootstrap functions are the async factories.** They wire everything, define `dispose()`, then initialize, and they resolve only when every service is ready. React and other services never see an uninitialized service.
+- **No cycles between services.** Break them with a callback (`recordingSession`'s `onComplete`), a subscription (`session` listens to `auth`), or by extracting a third service.
 
 ## Demo scenarios
 
@@ -110,7 +118,7 @@ Start a recording, then go to **Settings**. The top-bar pill keeps counting: the
 After this, any call to that `apiClient` throws `apiClient disposed`.
 
 ### 6. `?fail=storage` (app-level failure)
-Open `/?fail=storage`. `storage.init()` throws after its normal delay. The console shows `✗ init failed` and then the services created so far, disposed in reverse. The UI shows the **error screen**. **Retry** runs `bootstrapApp()` again from scratch. `?fail=auth` works the same way.
+Open `/?fail=storage`. `storage.init()` throws after its normal delay. The console shows `✗ init failed` and then every app service disposed in reverse creation order. The UI shows the **error screen**. **Retry** runs `bootstrapApp()` again from scratch. `?fail=auth` works the same way.
 
 ### 7. `?fail=userSettings` (session-level failure)
 Sign out, open `/login?fail=userSettings` and sign in. The session error screen appears **inside** the authenticated layout. The top bar still works, because app services are healthy: **Log out** works and toasts still show. **Retry** calls `session.retry()`, which bootstraps a fresh session scope.

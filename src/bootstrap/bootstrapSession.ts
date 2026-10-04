@@ -1,4 +1,4 @@
-import { createScope, type Disposable } from '#/services/shared/disposable'
+import type { Disposable } from '#/services/shared/disposable'
 import type { User } from '#/services/auth'
 import { createApiClient, type ApiClient } from '#/services/apiClient'
 import { createUserSettingsService, type UserSettingsService } from '#/services/userSettings'
@@ -19,29 +19,37 @@ export async function bootstrapSession(
   app: Pick<AppServices, 'logger' | 'storage' | 'notifier'>,
   user: User,
 ): Promise<SessionServices> {
+  // 1. Wire.
   const logger = app.logger.scope('session')
-  const scope = createScope()
+  const apiClient = createApiClient({ user, logger })
+  const userSettings = createUserSettingsService({
+    userId: user.id,
+    apiClient,
+    storage: app.storage,
+    notifier: app.notifier,
+    logger,
+  })
+  const encounters = createEncountersService({ apiClient, notifier: app.notifier, logger })
+
+  const services: SessionServices = {
+    apiClient,
+    userSettings,
+    encounters,
+    async dispose() {
+      // Reverse creation order. `encounters` disposes its active recording first.
+      await encounters.dispose()
+      await userSettings.dispose()
+      await apiClient.dispose()
+    },
+  }
+
+  // 2. Initialize. These two are independent of each other: run them concurrently.
   try {
-    const apiClient = scope.add(createApiClient({ user, logger }))
-    const userSettings = scope.add(
-      createUserSettingsService({
-        userId: user.id,
-        apiClient,
-        storage: app.storage,
-        notifier: app.notifier,
-        logger,
-      }),
-    )
-    const encounters = scope.add(
-      createEncountersService({ apiClient, notifier: app.notifier, logger }),
-    )
-
-    // Independent of each other: initialize concurrently.
     await Promise.all([userSettings.init(), encounters.init()])
-
-    return { apiClient, userSettings, encounters, dispose: scope.dispose }
   } catch (error) {
-    await scope.dispose()
+    await services.dispose()
     throw error
   }
+
+  return services
 }

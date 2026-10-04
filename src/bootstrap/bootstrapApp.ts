@@ -1,4 +1,4 @@
-import { createScope, type Disposable } from '#/services/shared/disposable'
+import type { Disposable } from '#/services/shared/disposable'
 import { createLogger, type Logger } from '#/services/logger'
 import { createNotifier, type NotifierService } from '#/services/notifier'
 import { createStorageService, type StorageService } from '#/services/storage'
@@ -15,33 +15,46 @@ export interface AppServices extends Disposable {
 }
 
 /**
- * Creates, wires and initializes the app-scoped services, top to bottom.
- * Runs once, before React renders. Disposal happens in reverse creation order.
+ * Creates, wires and initializes the app-scoped services. Runs once, before React renders.
+ * Resolves only when every service is initialized.
  */
 export async function bootstrapApp(): Promise<AppServices> {
-  const scope = createScope()
+  // 1. Wire: constructors only store their dependencies, nothing runs yet.
+  const logger = createLogger('app')
+  const notifier = createNotifier({ logger })
+  const storage = createStorageService({ logger })
+  const auth = createAuthService({ storage, logger })
+  const session = createSessionManager({
+    auth,
+    logger,
+    bootstrapSession: (user) => bootstrapSession({ logger, storage, notifier }, user),
+  })
+
+  const services: AppServices = {
+    logger,
+    storage,
+    notifier,
+    auth,
+    session,
+    async dispose() {
+      // Reverse creation order.
+      await session.dispose()
+      await auth.dispose()
+      await storage.dispose()
+      await notifier.dispose()
+      await logger.dispose()
+    },
+  }
+
+  // 2. Initialize, in dependency order.
   try {
-    const logger = scope.add(createLogger('app'))
-    const notifier = scope.add(createNotifier({ logger }))
-
-    const storage = scope.add(createStorageService({ logger }))
     await storage.init()
-
-    const auth = scope.add(createAuthService({ storage, logger }))
-    await auth.init()
-
-    const session = scope.add(
-      createSessionManager({
-        auth,
-        logger,
-        bootstrapSession: (user) => bootstrapSession({ logger, storage, notifier }, user),
-      }),
-    )
-    await session.init() // if auth restored a user, starts bootstrapping the session scope
-
-    return { logger, storage, notifier, auth, session, dispose: scope.dispose }
+    await auth.init() // restores the user from storage
+    await session.init() // if a user was restored, starts bootstrapping the session scope
   } catch (error) {
-    await scope.dispose() // undo whatever was created before the failure
+    await services.dispose()
     throw error
   }
+
+  return services
 }
