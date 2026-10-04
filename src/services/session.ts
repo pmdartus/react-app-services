@@ -71,7 +71,8 @@ class Session extends Store<SessionState> implements SessionManager {
     try {
       const services = await this.deps.bootstrapSession(user)
       if (generation !== this.generation) {
-        await services.dispose() // signed out while we were initializing
+        this.deps.logger.info('session signed out while initializing, discarding session scope')
+        await services.dispose()
         return
       }
       this.setState({ status: 'ready', services })

@@ -1,29 +1,16 @@
-import { Outlet, createRootRoute } from '@tanstack/react-router'
+import { Outlet, createRootRouteWithContext } from '@tanstack/react-router'
+import type { AppServices } from '#/bootstrap/bootstrapApp'
+import { Toasts } from '#/components/Toasts'
 
-import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
-import { TanStackDevtools } from '@tanstack/react-devtools'
+export interface RouterContext {
+  app: AppServices
+}
 
-import '../styles.css'
-
-export const Route = createRootRoute({
-  component: RootComponent,
-})
-
-function RootComponent() {
-  return (
+export const Route = createRootRouteWithContext<RouterContext>()({
+  component: () => (
     <>
       <Outlet />
-      <TanStackDevtools
-        config={{
-          position: 'bottom-right',
-        }}
-        plugins={[
-          {
-            name: 'TanStack Router',
-            render: <TanStackRouterDevtoolsPanel />,
-          },
-        ]}
-      />
+      <Toasts />
     </>
-  )
-}
+  ),
+})
