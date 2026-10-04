@@ -1,183 +1,122 @@
-Welcome to your new TanStack Start app!
+# React app with services outside the React tree
 
-# Getting Started
+A small Nabla-style medical scribe (encounters list, note, fake recording, settings), built to show one idea: **business logic lives in plain TypeScript services, and React only displays it.**
 
-To run this application:
+1. **Framework-agnostic core services.** Each service is a class behind an interface, with its dependencies passed in explicitly. Its public API is state + commands + lifecycle (`init` / `dispose`). Nothing under `src/services/` or `src/bootstrap/` imports React, and `npm run build` checks that (`npm run check:layers`).
+2. **Explicit bootstrapping.** Services are created, initialized and torn down by plain functions (`bootstrapApp`, `bootstrapSession`), written top to bottom. Provider nesting plays no part in it.
+3. **Hooks as thin adapters.** React gets a handle to a service through Context, subscribes with `useSyncExternalStore`, and passes the commands through. Hooks hold no logic.
 
-```bash
+## Running it
+
+```sh
 npm install
-npm run dev
+npm run dev      # http://localhost:3000
 ```
 
-# Building For Production
+Open the browser DevTools **console**. Every service logs its lifecycle with a colored scope prefix:
 
-To build this application for production:
-
-```bash
-npm run build
+```
+[app] storage + created
+[app] storage … init
+[app] storage ✓ init (633ms)
+[session] apiClient → GET /encounters
+[feature] recordingSession ✗ disposed
 ```
 
-## Styling
+## Scopes
 
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
+```mermaid
+flowchart TD
+  subgraph app["App scope: bootstrapApp(), before React renders"]
+    logger
+    notifier --> logger
+    storage --> logger
+    auth --> storage
+    session["session (SessionManager)"] --> auth
+  end
 
-### Removing Tailwind CSS
+  subgraph sess["Session scope: bootstrapSession(app, user), from sign-in to sign-out"]
+    apiClient --> |user, token| auth
+    userSettings --> apiClient
+    userSettings --> storage
+    userSettings --> notifier
+    encounters --> apiClient
+    encounters --> notifier
+  end
 
-If you prefer not to use Tailwind CSS:
+  subgraph feat["Feature scope: one per recording"]
+    recordingSession --> notifier
+  end
 
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Remove `@tailwindcss/vite` and `tailwindcss` from `package.json`
-
-
-
-## Routing
-
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router";
+  session -. creates / disposes .-> sess
+  encounters -. creates / disposes .-> feat
 ```
 
-Then anywhere in your JSX you can use it like so:
+| Scope | Created | Disposed |
+|---|---|---|
+| App | once, by `bootstrapApp()` in `main.tsx` | never during normal use (`app.dispose()` exists) |
+| Session | by `SessionManager` on sign-in (or on startup if the user was restored) | on sign-out, in reverse creation order |
+| Feature | by `encounters.startRecording(id)` | on opening another encounter, going back to the list, or signing out |
 
-```tsx
-<Link to="/about">About</Link>
+## Code tour: suggested reading order
+
+1. [`src/services/auth.ts`](src/services/auth.ts): a typical service. Interface, `AuthDependencies`, class, `createAuthService` factory, `init` / `dispose`, reactive state through the [`Store`](src/services/shared/store.ts) helper. No React.
+2. [`src/bootstrap/bootstrapApp.ts`](src/bootstrap/bootstrapApp.ts): the composition root. Dependencies are wired by hand in creation order, and [`createScope()`](src/services/shared/disposable.ts) records each service so teardown (or cleanup after a failed init) runs in reverse.
+3. [`src/main.tsx`](src/main.tsx): `bootstrapApp()` runs **before** React renders the app. React renders a spinner, an error screen, or the router. No `useEffect`.
+4. [`src/services/session.ts`](src/services/session.ts) + [`src/bootstrap/bootstrapSession.ts`](src/bootstrap/bootstrapSession.ts): the session lifecycle in plain TypeScript. It reacts to `auth`, bootstraps or disposes the session scope, and guards against races with a generation counter. `userSettings.init()` and `encounters.init()` run concurrently with `Promise.all`.
+5. [`src/react/`](src/react/): the adapters. Each hook is 3–10 lines: get the service, `useSyncExternalStore(service.subscribe, service.getState)`, return state + bound commands.
+6. [`src/routes/_authenticated.tsx`](src/routes/_authenticated.tsx): the layout just mirrors `session.getState()` (spinner / error / `<Outlet/>`). It doesn't start or stop anything.
+7. [`src/services/encounters.ts`](src/services/encounters.ts) + [`src/services/recordingSession.ts`](src/services/recordingSession.ts): a service that owns a nested scope. `encounters.dispose()` disposes the active recording first, which is the cascading teardown.
+
+## Demo scenarios
+
+Tip: run `localStorage.clear()` in the console to start from a signed-out state.
+
+### 1. Cold start
+Load `/`. The UI shows **"Starting app…"** while `storage` (~400–800 ms) and then `auth` initialize. In the console: `[app] … + created`, `… init`, `✓ init (Nms)`, all in creation order. Then you land on `/login`.
+
+### 2. Login
+Click **Sign in** (any email works). The UI shows **"Loading your workspace…"** while `bootstrapSession` runs. In the console: `[session] apiClient + created`, then `userSettings` and `encounters` initializing **in parallel**, with every API request logged (`→` / `←`).
+
+### 3. Reload while signed in
+Reload the page. You get the app spinner, then the workspace spinner, then the encounters. In the console: `[app] auth restored … from storage`, and the session scope is bootstrapped without a login.
+
+### 4. Record, then open another encounter
+Open an encounter and click **Record**: a timer starts and a fake transcript line appears every ~2 s. A red pill in the top bar shows the recording. Open a different encounter: a **"Recording discarded"** toast appears and the console shows `[feature] recordingSession ✗ disposed`. The interval is cleared.
+
+*(Optional: click **Stop** instead. You get a "Recording saved" toast, a `PATCH /encounters/…` request, and the encounter's badge turns **Completed**.)*
+
+### 5. Record, then log out from settings
+Start a recording, then go to **Settings**. The top-bar pill keeps counting: the recording is a service, so it outlives the encounter component. On **Profile**, click **Log out**:
+
+```
+[app] auth signed out
+[app] session tearing down session scope
+[feature] recordingSession ✗ disposed      ← feature scope first
+[session] encounters ✗ disposed            ← then session services,
+[session] userSettings ✗ disposed             in reverse creation order
+[session] apiClient ✗ disposed
 ```
 
-This will create a link that will navigate to the `/about` route.
+After this, any call to that `apiClient` throws `apiClient disposed`.
 
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
+### 6. `?fail=storage` (app-level failure)
+Open `/?fail=storage`. `storage.init()` throws after its normal delay. The console shows `✗ init failed` and then the services created so far, disposed in reverse. The UI shows the **error screen**. **Retry** runs `bootstrapApp()` again from scratch. `?fail=auth` works the same way.
 
-### Using A Layout
+### 7. `?fail=userSettings` (session-level failure)
+Sign out, open `/login?fail=userSettings` and sign in. The session error screen appears **inside** the authenticated layout. The top bar still works, because app services are healthy: **Log out** works and toasts still show. **Retry** calls `session.retry()`, which bootstraps a fresh session scope.
 
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
+You may see `[session] encounters ✗ init failed: apiClient disposed` around the retry. That's the first attempt's in-flight request hitting the `apiClient` that was disposed when the attempt failed.
 
-Here is an example layout that includes a header:
+> **Failure flags only fail the first attempt** (per page load), so Retry succeeds. Reload the page with the param still in the URL to make it fail again.
 
-```tsx
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
+### Bonus: logout while the workspace is loading
+Sign in and click **Log out** while "Loading your workspace…" is shown. The console shows `session signed out while initializing, discarding session scope`, and the half-built scope is disposed instead of becoming `ready`.
 
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'My App' },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-})
-```
+## A note on recording disposal
 
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
+A recording belongs to the **open encounter**. Opening another encounter or returning to the list disposes it (see `onEnter` / `onStay` in [`encounters/$encounterId.tsx`](src/routes/_authenticated/encounters/$encounterId.tsx) and `encounters.openEncounter()`). Visiting Settings doesn't dispose it. That keeps scenario 5 possible, and it shows the point of a service: its behavior can outlive the component that started it.
 
-## Server Functions
+## Rule of thumb
 
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from '@tanstack/react-start'
-
-const getServerTime = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  return new Date().toISOString()
-})
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState('')
-  
-  useEffect(() => {
-    getServerTime().then(setTime)
-  }, [])
-  
-  return <div>Server time: {time}</div>
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
-
-export const Route = createFileRoute('/api/hello')({
-  server: {
-    handlers: {
-      GET: () => json({ message: 'Hello, World!' }),
-    },
-  },
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/people')({
-  loader: async () => {
-    const response = await fetch('https://swapi.dev/api/people')
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+Keep **visual, component-scoped** concerns in React: form drafts, hover/open state, a "Signing in…" button label. **Extract a service** when the behavior must outlive a component, be shared outside a UI subtree, be called from non-React code (another service, a router hook), or be tested without rendering anything.
