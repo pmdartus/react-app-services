@@ -13,6 +13,15 @@ npm install
 npm run dev      # http://localhost:3000
 ```
 
+Other scripts:
+
+| Script | What it does |
+|---|---|
+| `npm run typecheck` | `tsc -b`: type-checks the app (`tsconfig.app.json`, browser) and the Vite config (`tsconfig.node.json`, Node), incrementally |
+| `npm run check:layers` | fails if anything under `src/services/` or `src/bootstrap/` imports React or TanStack |
+| `npm run build` | `check:layers` → `tsc -b` → `vite build` into `dist/` |
+| `npm run preview` | serves the production build |
+
 Open the browser DevTools **console**. Every service logs its lifecycle with a colored scope prefix:
 
 ```
