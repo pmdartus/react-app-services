@@ -1,4 +1,4 @@
-import type { AuthService, User } from '../app/auth'
+import type { User } from '../app/auth'
 import type { StorageService } from '../app/storage'
 import type { Disposable } from '../shared/disposable'
 import { Store } from '../shared/store'
@@ -18,7 +18,6 @@ export type SessionState =
  * Bootstraps the session services and exposes how that's going. React only reads `getState()`.
  */
 export interface Session extends Disposable {
-  readonly user: User
   init(): Promise<void>
   subscribe(listener: () => void): () => void
   getState(): SessionState
@@ -31,13 +30,11 @@ export interface SessionDependencies {
 }
 
 class UserSession extends Store<SessionState> implements Session {
-  readonly user: User
   // A session is single-use: once disposed (sign-out), a bootstrap that finishes late is discarded.
   private disposed = false
 
   constructor(private readonly deps: SessionDependencies) {
     super({ status: 'loading' })
-    this.user = deps.user
     logger.created('session', deps.user.email)
   }
 
@@ -46,6 +43,7 @@ class UserSession extends Store<SessionState> implements Session {
   }
 
   retry = () => {
+    if (this.getState().status !== 'error') return
     void this.load()
   }
 
@@ -69,7 +67,7 @@ class UserSession extends Store<SessionState> implements Session {
       this.setState({ status: 'ready', services })
     } catch (error) {
       if (this.disposed) return
-      reportError(error, { scope: 'session', user: this.user.email })
+      reportError(error, { scope: 'session', user: this.deps.user.email })
       this.setState({ status: 'error', error: error as Error })
     }
   }
@@ -77,12 +75,4 @@ class UserSession extends Store<SessionState> implements Session {
 
 export function createSession(deps: SessionDependencies): Session {
   return new UserSession(deps)
-}
-
-/** The current session's services, if it's ready. For non-React code like router hooks. */
-export function getSessionServices(auth: AuthService): SessionServices | null {
-  const state = auth.getState()
-  if (state.status !== 'signedIn') return null
-  const session = state.session.getState()
-  return session.status === 'ready' ? session.services : null
 }

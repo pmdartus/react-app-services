@@ -8,6 +8,7 @@ export function useEncounters() {
     ...state,
     getById: encounters.getById,
     startRecording: encounters.startRecording,
+    invalidateNote: encounters.invalidateNote,
   }
 }
 

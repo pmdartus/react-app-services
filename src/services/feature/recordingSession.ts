@@ -16,6 +16,8 @@ export interface RecordingSession extends Disposable {
   readonly encounterId: string
   subscribe(listener: () => void): () => void
   getState(): RecordingState
+  /** Starts the timer and the fake transcript. Called by the owner right after creating it. */
+  start(): void
   stop(): void
 }
 
@@ -40,14 +42,18 @@ const FAKE_TRANSCRIPT = [
 
 class Recording extends Store<RecordingState> implements RecordingSession {
   readonly encounterId: string
-  private readonly startedAt = Date.now()
-  private readonly interval: ReturnType<typeof setInterval>
+  private startedAt = 0
+  private interval: ReturnType<typeof setInterval> | undefined
 
   constructor(private readonly deps: RecordingSessionDependencies) {
     super({ status: 'recording', elapsedMs: 0, transcript: [] })
     this.encounterId = deps.encounterId
-    this.interval = setInterval(this.tick, TICK_MS)
     logger.created('recordingSession', `encounter ${deps.encounterId}`)
+  }
+
+  start() {
+    this.startedAt = Date.now()
+    this.interval = setInterval(this.tick, TICK_MS)
   }
 
   stop = () => {

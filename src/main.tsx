@@ -1,25 +1,12 @@
 import ReactDOM from 'react-dom/client'
-import { RouterProvider, createRouter } from '@tanstack/react-router'
-import { routeTree } from './routeTree.gen'
+import { RouterProvider } from '@tanstack/react-router'
+import { createAppRouter } from './router'
 import { bootstrapApp, type AppServices } from './services/app/bootstrapApp'
 import { reportError } from './services/global/errorReporter'
 import { AppServicesContext } from './context/AppServicesContext'
 import { Spinner } from './components/Spinner'
 import { ErrorScreen } from './components/ErrorScreen'
 import './styles.css'
-
-const router = createRouter({
-  routeTree,
-  defaultPreload: 'intent',
-  scrollRestoration: true,
-  context: { app: undefined! }, // provided below, once bootstrapped
-})
-
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router
-  }
-}
 
 const root = ReactDOM.createRoot(document.getElementById('app')!)
 
@@ -28,17 +15,17 @@ async function start() {
   root.render(<Spinner label="Starting app…" />)
   try {
     const app = await bootstrapApp()
-    root.render(<App app={app} />)
+    root.render(<App app={app} router={createAppRouter(app)} />)
   } catch (error) {
     reportError(error, { scope: 'app' })
     root.render(<ErrorScreen error={error as Error} onRetry={start} />)
   }
 }
 
-function App({ app }: { app: AppServices }) {
+function App({ app, router }: { app: AppServices; router: ReturnType<typeof createAppRouter> }) {
   return (
     <AppServicesContext value={app}>
-      <RouterProvider router={router} context={{ app }} />
+      <RouterProvider router={router} />
     </AppServicesContext>
   )
 }

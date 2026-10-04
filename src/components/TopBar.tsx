@@ -4,7 +4,7 @@ import { useSession } from '#/hooks/useSession'
 import { useRecordingSession } from '#/hooks/useRecordingSession'
 import { formatElapsed, initials } from './format'
 
-/** Only depends on app services, so it keeps working while the session is loading or failed. */
+/** Usable while the session is loading or failed: only the recording pill needs session services. */
 export function TopBar() {
   const auth = useAuth()
   const session = useSession()

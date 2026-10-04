@@ -1,7 +1,6 @@
 import type { Disposable } from '../shared/disposable'
 import { createStorageService, type StorageService } from './storage'
 import { createAuthService, type AuthService } from './auth'
-import { createSession } from '../session/session'
 
 /**
  * App-scoped services: created once, before React renders, and injected.
@@ -19,10 +18,7 @@ export interface AppServices extends Disposable {
 export async function bootstrapApp(): Promise<AppServices> {
   // 1. Wire: constructors only store their dependencies, nothing runs yet.
   const storage = createStorageService()
-  const auth = createAuthService({
-    storage,
-    openSession: (user) => createSession({ user, storage }),
-  })
+  const auth = createAuthService({ storage })
 
   const services: AppServices = {
     storage,

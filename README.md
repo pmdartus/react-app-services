@@ -22,7 +22,12 @@ src/context/  AppServicesContext, SessionServicesContext   hand services to Reac
 src/hooks/    useAuth, useSession, useEncounters, …        subscribe to them
 ```
 
-A file only imports services from its own scope or from outer scopes (`feature` → `session` → `app` → `global`).
+**The dependency rule:** using a service points outward, and owning a child scope points one step inward.
+
+- A file uses its own scope and outer ones: `feature` → `session` → `app` → `global` → `shared`.
+- Only an **owner** reaches one scope inward, to create the child it owns: `app/auth.ts` creates the `Session`, and `session/encounters.ts` creates the `RecordingSession`. Nothing else does.
+
+`npm run check:layers` ([`scripts/check-layers.mjs`](scripts/check-layers.mjs)) enforces both rules, and also that nothing under `src/services/` imports React. The owners are listed in that file. Helpers that exist only for the UI live next to the UI: `getSessionServices`, used by router hooks, is in [`routes/-lib/`](src/routes/-lib/getSessionServices.ts).
 
 ### Global or injected?
 
@@ -32,7 +37,13 @@ Not everything needs dependency injection. `logger`, `notifier` and `reportError
 - lives as long as the page, so it never needs disposing,
 - is ambient: almost everything uses it, and passing it through every constructor only adds noise.
 
-Everything else is injected: services that need `init()` (`storage`), hold per-user data (anything under `session/`), or that you'd want to swap per environment. The trade-off: a global can't be replaced per instance, so a test has to mock the module instead of passing a fake.
+Everything else is injected: services that need `init()` (`storage`), or hold per-user data (anything under `session/`).
+
+The trade-offs, which a real app should weigh:
+
+- **Tests.** A global can't be replaced per instance, so a test has to mock the module instead of passing a fake.
+- **Configuration.** A real error reporter (Sentry in prod, the console in dev) needs a DSN, a release and the current user. You'd keep it global but configure it from `bootstrapApp` (e.g. `configureErrorReporter(…)`), and set its user from the session. Here `session.ts` passes the user by hand.
+- **UI copy in services.** Services call `notifier.notify({ message: 'Preferences saved' })` themselves. That's a deliberate shortcut: it shows that non-React code can reach the UI. In a larger app, services would return or throw, and callers would pick the wording (and the language).
 
 ## Running it
 
@@ -46,7 +57,7 @@ Other scripts:
 | Script | What it does |
 |---|---|
 | `npm run typecheck` | `tsc -b`: type-checks the app (`tsconfig.app.json`, browser) and the Vite config (`tsconfig.node.json`, Node), incrementally |
-| `npm run check:layers` | fails if anything under `src/services/` imports React or TanStack |
+| `npm run check:layers` | enforces the dependency rule between scopes, and that nothing under `src/services/` imports React or TanStack |
 | `npm run build` | `check:layers` → `tsc -b` → `vite build` into `dist/` |
 | `npm run preview` | serves the production build |
 
@@ -104,29 +115,31 @@ The session and the recording follow the same pattern: **the parent service hold
 ## Code tour: suggested reading order
 
 1. [`services/global/`](src/services/global/): the singletons. `export const logger = …`, `export const notifier = …`, `export function reportError(…)`. Nothing to wire.
-2. [`services/app/auth.ts`](src/services/app/auth.ts): a typical injected service. Interface, `AuthDependencies`, class, `createAuthService` factory, `init` / `dispose`, reactive state through the [`Store`](src/services/shared/store.ts) helper. It also owns the session: `signIn()` opens one, `logout()` disposes it.
+2. [`services/app/auth.ts`](src/services/app/auth.ts): a typical injected service. Interface, `AuthDependencies`, class, `createAuthService` factory, `init` / `dispose`, reactive state through the [`Store`](src/services/shared/store.ts) helper. It also owns the session: `signIn()` creates one (closing any previous one), and `logout()` disposes it.
 3. [`services/app/bootstrapApp.ts`](src/services/app/bootstrapApp.ts): the composition root, in two steps. First it **wires** every service by hand (constructors only store dependencies) and writes `dispose()` in reverse creation order. Then it **initializes** them in dependency order. If an `init()` fails, it disposes everything and rethrows.
 4. [`main.tsx`](src/main.tsx): `bootstrapApp()` runs **before** React renders the app. React renders a spinner, an error screen, or the router. No `useEffect`.
-5. [`services/session/session.ts`](src/services/session/session.ts) + [`bootstrapSession.ts`](src/services/session/bootstrapSession.ts): one `Session` per sign-in. It runs `bootstrapSession` and exposes `loading` / `ready` / `error` + `retry()`. A session is single-use, so one `disposed` flag is enough to discard a bootstrap that finishes after sign-out. `userSettings.init()` and `encounters.init()` run concurrently with `Promise.all`.
+5. [`services/session/session.ts`](src/services/session/session.ts) + [`bootstrapSession.ts`](src/services/session/bootstrapSession.ts): one `Session` per sign-in. It runs `bootstrapSession` and exposes `loading` / `ready` / `error` + `retry()`. A session is single-use, so one `disposed` flag is enough to discard a bootstrap that finishes after sign-out. (A real app would also pass an `AbortSignal` into `bootstrapSession`, to cancel in-flight requests instead of waiting for them.) `userSettings.init()` and `encounters.init()` run concurrently with `Promise.all`.
 6. [`context/`](src/context/) + [`hooks/`](src/hooks/): the adapters. Contexts only carry services that already exist. Each hook is 3–10 lines: get the service, `useSyncExternalStore(service.subscribe, service.getState)`, return state + bound commands. `useNotifications` imports `notifier` instead of reading a context.
 7. [`routes/_authenticated.tsx`](src/routes/_authenticated.tsx): the layout mirrors the session state (placeholder / error / `<Outlet/>`) and provides `SessionServicesContext`. It doesn't start or stop anything.
-8. [`services/session/encounters.ts`](src/services/session/encounters.ts) + [`services/feature/recordingSession.ts`](src/services/feature/recordingSession.ts): a service that owns a nested scope. `encounters.dispose()` disposes the active recording first, which is the cascading teardown.
+8. [`services/session/encounters.ts`](src/services/session/encounters.ts) + [`services/feature/recordingSession.ts`](src/services/feature/recordingSession.ts): a service that owns a nested scope, exactly like `auth` owns the session. `startRecording()` disposes the previous recording, creates the new one, then calls `start()`. `encounters.dispose()` disposes the active recording first, which is the cascading teardown.
 
 ## Placeholders
 
 Screens that are about to load show grey placeholders shaped like the real screen ([`components/Placeholders.tsx`](src/components/Placeholders.tsx)). Two mechanisms are used, each where it fits:
 
 - **The whole screen, while the session loads.** Each route declares its placeholder: `staticData: { placeholder: SettingsPlaceholder }`. While the session is `loading`, the authenticated layout renders the placeholder of the deepest matched route. This is plain state, not Suspense, because the session already exposes it.
-- **Part of a screen, while its data loads: Suspense.** An encounter's note is fetched when you open it. `encounters.getNote(id)` caches the promise, so it returns the same one on every render. `useEncounterNote(id)` calls `use()` on it, and the detail page wraps it in `<Suspense fallback={<NotePlaceholder />}>`. The service still owns fetching and caching, and React only waits on the promise.
+- **Part of a screen, while its data loads: Suspense.** An encounter's note is fetched when you open it. The route's `onEnter` calls `encounters.openEncounter(id)`, which starts the fetch before the component renders (render-as-you-fetch). `encounters.getNote(id)` caches the promise for the rest of the session, so it returns the same one on every render. `useEncounterNote(id)` calls `use()` on it, and the detail page wraps it in `<Suspense fallback={<NotePlaceholder />}>` inside an `<ErrorBoundary>`. A failed fetch stays cached, because React re-renders once after a rejection and must get the same promise back. The boundary's Retry calls `encounters.invalidateNote(id)`, then re-renders, which fetches the note again. The service owns fetching and caching, and React only waits on the promise.
+
+Trade-off: "the deepest match wins" means a screen's placeholder redraws its parent layouts (the encounters sidebar, the settings header and tabs). That's simple, but it drifts when a layout changes. The alternative is one placeholder per route level, nested like the layouts, or rendering layouts that don't need the session outside the session gate.
 
 ## Service conventions
 
 - **Dependencies:** scoped services are passed in through `XxxDependencies`. Globals are imported.
-- **Constructor:** stores dependencies and logs `created`. No timers, subscriptions or I/O.
+- **Constructor:** stores dependencies and logs `created`. No timers, subscriptions or I/O. (`recordingSession` gets a `start()` for that, which its owner calls.)
 - **`init()`** (optional, async): side effects and async setup.
 - **`dispose()`:** undoes what `init()` did, and is safe to call even if `init()` never ran or failed.
-- **Bootstrap functions are the async factories.** They wire everything, define `dispose()`, then initialize, and they resolve only when every service is ready. React and other services never see an uninitialized service.
-- **No cycles between services.** Break them with a callback (`recordingSession`'s `onComplete`, `auth`'s `openSession`) or by extracting a third service.
+- **Bootstrap functions are the async factories.** They wire everything, define `dispose()`, then initialize, and they resolve only when every service is ready. React and other services never see an uninitialized service. One deliberate exception: `auth.init()` *starts* the session without awaiting it, so app startup isn't blocked by session loading. The session has its own `loading` state for that.
+- **No cycles between services.** Break them with a callback (`recordingSession`'s `onComplete`) or by extracting a third service. Owners and children may share *types* (`auth` holds a `Session`, `Session` takes a `User`), but only the owner calls into the child.
 
 ## Demo scenarios
 
@@ -165,6 +178,9 @@ Open `/?fail=storage`. `storage.init()` throws after its normal delay. The conso
 
 ### 7. `?fail=userSettings` (session-level failure)
 Sign out, open `/login?fail=userSettings` and sign in. The session error screen appears **inside** the authenticated layout, and `errorReporter` logs the failure. The top bar still works, because app services are healthy: **Log out** works and toasts still show. **Retry** calls `session.retry()`, which bootstraps fresh session services.
+
+### 8. `?fail=note` (a failure inside a screen)
+Open `/encounters?fail=note` and open an encounter. The note's fetch fails: the rest of the screen stays usable, and the note area shows the error with a **Retry** link. Retry invalidates the cached failure and fetches again, and the note appears.
 
 > **Failure flags only fail the first attempt** (per page load), so Retry succeeds. Reload the page with the param still in the URL to make it fail again.
 

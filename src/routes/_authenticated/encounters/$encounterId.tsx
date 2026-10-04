@@ -1,19 +1,21 @@
 import { Suspense } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import type { RouterContext } from '#/routes/__root'
-import { getSessionServices } from '#/services/session/session'
+import { getSessionServices } from '#/routes/-lib/getSessionServices'
 import { useEncounterNote, useEncounters } from '#/hooks/useEncounters'
 import { useRecordingSession } from '#/hooks/useRecordingSession'
 import { useUserSettings } from '#/hooks/useUserSettings'
 import { StatusBadge } from '#/components/StatusBadge'
 import { formatElapsed, formatTime } from '#/components/format'
 import { EncountersPlaceholder, NotePlaceholder } from '#/components/Placeholders'
+import { ErrorBoundary } from '#/components/ErrorBoundary'
 
-// Opening another encounter disposes a recording started elsewhere.
+// Opening an encounter starts fetching its note, and disposes a recording started elsewhere.
 // (Visiting /settings does not: the recording keeps running in the background.)
 // `onStay` covers switching from one encounter to another (same route, new params).
+// On a cold load the session isn't ready yet, so this is a no-op and the note is fetched on render.
 const openEncounter = ({ context, params }: { context: RouterContext; params: { encounterId: string } }) =>
-  getSessionServices(context.app.auth)?.encounters.openEncounter(params.encounterId)
+  getSessionServices(context.app)?.encounters.openEncounter(params.encounterId)
 
 export const Route = createFileRoute('/_authenticated/encounters/$encounterId')({
   onEnter: openEncounter,
@@ -24,7 +26,7 @@ export const Route = createFileRoute('/_authenticated/encounters/$encounterId')(
 
 function EncounterDetail() {
   const { encounterId } = Route.useParams()
-  const { getById } = useEncounters()
+  const { getById, invalidateNote } = useEncounters()
   const { settings } = useUserSettings()
   const encounter = getById(encounterId)
 
@@ -53,10 +55,23 @@ function EncounterDetail() {
             {settings.noteTemplate === 'soap' ? 'SOAP' : 'Narrative'} · {settings.noteLanguage === 'en' ? 'English' : 'Français'}
           </span>
         </div>
-        {/* The note is fetched when the encounter is opened. Keyed so each encounter shows its own placeholder. */}
-        <Suspense key={encounter.id} fallback={<NotePlaceholder />}>
-          <NoteBody encounterId={encounter.id} />
-        </Suspense>
+        {/* Keyed so each encounter gets its own placeholder and its own error state. */}
+        <ErrorBoundary
+          key={encounter.id}
+          fallback={(error, reset) => (
+            <NoteError
+              error={error}
+              onRetry={() => {
+                invalidateNote(encounter.id) // forget the failed fetch...
+                reset() // ...and render again, which fetches it anew
+              }}
+            />
+          )}
+        >
+          <Suspense fallback={<NotePlaceholder />}>
+            <NoteBody encounterId={encounter.id} />
+          </Suspense>
+        </ErrorBoundary>
       </section>
     </article>
   )
@@ -68,6 +83,17 @@ function NoteBody({ encounterId }: { encounterId: string }) {
     <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm leading-relaxed whitespace-pre-line text-slate-700">
       {note}
     </p>
+  )
+}
+
+function NoteError({ error, onRetry }: { error: Error; onRetry: () => void }) {
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+      <span>Could not load the note: {error.message}</span>
+      <button onClick={onRetry} className="font-medium underline">
+        Retry
+      </button>
+    </div>
   )
 }
 

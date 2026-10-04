@@ -1,6 +1,7 @@
 import type { ApiClient, Encounter } from './apiClient'
 import type { Disposable } from '../shared/disposable'
 import { Store } from '../shared/store'
+import { failIfRequested } from '../shared/demoFlags'
 import { logger as rootLogger } from '../global/logger'
 import { notifier } from '../global/notifier'
 import { reportError } from '../global/errorReporter'
@@ -22,12 +23,19 @@ export interface EncountersService extends Disposable {
   getState(): EncountersState
   getById(id: string): Encounter | undefined
   /**
-   * Fetched on first call, then cached. Returns the *same* promise every time,
-   * so a component can `use()` it and suspend while it loads.
+   * Fetched on first call, then cached for the rest of the session (notes are read-only here).
+   * Returns the *same* promise every time, so a component can `use()` it and suspend while it loads.
+   * A failed fetch stays cached (React re-renders after a rejection and must see the same promise)
+   * until `invalidateNote()`.
    */
   getNote(id: string): Promise<string>
+  /** Drops a cached note, so the next `getNote()` fetches it again. Used to retry a failed fetch. */
+  invalidateNote(id: string): void
   startRecording(encounterId: string): void
-  /** A recording belongs to the open encounter: opening another one (or none) disposes it. */
+  /**
+   * Called by the router when an encounter is opened (or none). Starts fetching its note,
+   * and disposes a recording that belongs to another encounter.
+   */
   openEncounter(encounterId: string | null): void
   disposeRecording(): void
 }
@@ -56,10 +64,17 @@ class Encounters extends Store<EncountersState> implements EncountersService {
   getNote = (id: string) => {
     let note = this.notes.get(id)
     if (!note) {
-      note = this.deps.apiClient.getEncounterNote(id)
+      note = this.deps.apiClient.getEncounterNote(id).then((text) => {
+        failIfRequested('note')
+        return text
+      })
       this.notes.set(id, note)
     }
     return note
+  }
+
+  invalidateNote = (id: string) => {
+    this.notes.delete(id)
   }
 
   startRecording = (encounterId: string) => {
@@ -69,9 +84,11 @@ class Encounters extends Store<EncountersState> implements EncountersService {
       onComplete: () => this.markCompleted(encounterId),
     })
     this.setState({ ...this.getState(), recording })
+    recording.start()
   }
 
   openEncounter = (encounterId: string | null) => {
+    if (encounterId) void this.getNote(encounterId).catch(() => {}) // render-as-you-fetch; errors surface where it's rendered
     const { recording } = this.getState()
     if (recording && recording.encounterId !== encounterId) this.disposeRecording()
   }

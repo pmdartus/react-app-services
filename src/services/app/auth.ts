@@ -1,5 +1,5 @@
 import type { StorageService } from './storage'
-import type { Session } from '../session/session'
+import { createSession, type Session } from '../session/session'
 import type { Disposable } from '../shared/disposable'
 import { Store } from '../shared/store'
 import { fakeLatency } from '../shared/delay'
@@ -32,8 +32,6 @@ export interface AuthService extends Disposable {
 
 export interface AuthDependencies {
   storage: StorageService
-  /** Creates the session scope for a user. Passed in by `bootstrapApp`, which knows how to build it. */
-  openSession: (user: User) => Session
 }
 
 const USER_KEY = 'auth.user'
@@ -83,8 +81,11 @@ class Auth extends Store<AuthState> implements AuthService {
   }
 
   private signIn(user: User) {
-    const session = this.deps.openSession(user)
+    const previous = this.getState()
+    // Auth owns the session: it creates it (inner scope) and passes down what it needs from the app scope.
+    const session = createSession({ user, storage: this.deps.storage })
     this.setState({ status: 'signedIn', user, session })
+    if (previous.status === 'signedIn') void previous.session.dispose() // at most one session at a time
     // Not awaited: the session has its own loading state, and the UI shows placeholders meanwhile.
     void session.init()
   }

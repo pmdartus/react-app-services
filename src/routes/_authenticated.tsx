@@ -6,6 +6,8 @@ import { Spinner } from '#/components/Spinner'
 import { ErrorScreen } from '#/components/ErrorScreen'
 
 export const Route = createFileRoute('/_authenticated')({
+  // Guards navigation into the layout. Signing out while inside it doesn't re-run `beforeLoad`,
+  // so the layout also redirects when the session goes away (`<Navigate>` below).
   beforeLoad: ({ context }) => {
     if (context.app.auth.getState().status === 'signedOut') throw redirect({ to: '/login' })
   },
@@ -20,7 +22,7 @@ function AuthenticatedLayout() {
   return (
     <SessionServicesContext value={session.status === 'ready' ? session.services : null}>
       <div className="flex h-full flex-col">
-        {/* Only needs app services, so it keeps working while the session loads or failed. */}
+        {/* Works while the session loads or failed; its recording pill only shows once it's ready. */}
         <TopBar />
         <main className="flex min-h-0 flex-1">
           {session.status === 'loading' && <ScreenPlaceholder />}
