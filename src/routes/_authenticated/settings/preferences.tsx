@@ -1,8 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useUserSettings } from '#/react/useUserSettings'
-import type { UserSettings } from '#/services/userSettings'
+import { SettingsPlaceholder } from '#/components/Placeholders'
+import { useUserSettings } from '#/hooks/useUserSettings'
+import type { UserSettings } from '#/services/session/userSettings'
 
 export const Route = createFileRoute('/_authenticated/settings/preferences')({
+  staticData: { placeholder: SettingsPlaceholder },
   component: PreferencesTab,
 })
 

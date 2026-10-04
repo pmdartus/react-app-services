@@ -1,21 +1,24 @@
+import { Suspense } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import type { RouterContext } from '#/routes/__root'
-import { getSessionServices } from '#/react/useSession'
-import { useEncounters } from '#/react/useEncounters'
-import { useRecordingSession } from '#/react/useRecordingSession'
-import { useUserSettings } from '#/react/useUserSettings'
+import { getSessionServices } from '#/services/session/session'
+import { useEncounterNote, useEncounters } from '#/hooks/useEncounters'
+import { useRecordingSession } from '#/hooks/useRecordingSession'
+import { useUserSettings } from '#/hooks/useUserSettings'
 import { StatusBadge } from '#/components/StatusBadge'
 import { formatElapsed, formatTime } from '#/components/format'
+import { EncountersPlaceholder, NotePlaceholder } from '#/components/Placeholders'
 
 // Opening another encounter disposes a recording started elsewhere.
 // (Visiting /settings does not: the recording keeps running in the background.)
 // `onStay` covers switching from one encounter to another (same route, new params).
 const openEncounter = ({ context, params }: { context: RouterContext; params: { encounterId: string } }) =>
-  getSessionServices(context.app)?.encounters.openEncounter(params.encounterId)
+  getSessionServices(context.app.auth)?.encounters.openEncounter(params.encounterId)
 
 export const Route = createFileRoute('/_authenticated/encounters/$encounterId')({
   onEnter: openEncounter,
   onStay: openEncounter,
+  staticData: { placeholder: () => <EncountersPlaceholder detail /> },
   component: EncounterDetail,
 })
 
@@ -50,11 +53,21 @@ function EncounterDetail() {
             {settings.noteTemplate === 'soap' ? 'SOAP' : 'Narrative'} · {settings.noteLanguage === 'en' ? 'English' : 'Français'}
           </span>
         </div>
-        <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm leading-relaxed whitespace-pre-line text-slate-700">
-          {encounter.note}
-        </p>
+        {/* The note is fetched when the encounter is opened. Keyed so each encounter shows its own placeholder. */}
+        <Suspense key={encounter.id} fallback={<NotePlaceholder />}>
+          <NoteBody encounterId={encounter.id} />
+        </Suspense>
       </section>
     </article>
+  )
+}
+
+function NoteBody({ encounterId }: { encounterId: string }) {
+  const note = useEncounterNote(encounterId)
+  return (
+    <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm leading-relaxed whitespace-pre-line text-slate-700">
+      {note}
+    </p>
   )
 }
 

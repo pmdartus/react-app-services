@@ -1,10 +1,13 @@
 import type { ApiClient, UserSettings } from './apiClient'
-import type { Logger } from './logger'
-import type { NotifierService } from './notifier'
-import type { StorageService } from './storage'
-import type { Disposable } from './shared/disposable'
-import { Store } from './shared/store'
-import { failIfRequested } from './shared/demoFlags'
+import type { StorageService } from '../app/storage'
+import type { Disposable } from '../shared/disposable'
+import { Store } from '../shared/store'
+import { failIfRequested } from '../shared/demoFlags'
+import { logger as rootLogger } from '../global/logger'
+import { notifier } from '../global/notifier'
+import { reportError } from '../global/errorReporter'
+
+const logger = rootLogger.scope('session')
 
 export type { UserSettings }
 
@@ -20,8 +23,6 @@ export interface UserSettingsDependencies {
   userId: string
   apiClient: ApiClient
   storage: StorageService
-  notifier: NotifierService
-  logger: Logger
 }
 
 class UserSettingsStore extends Store<UserSettings> implements UserSettingsService {
@@ -31,11 +32,11 @@ class UserSettingsStore extends Store<UserSettings> implements UserSettingsServi
   constructor(private readonly deps: UserSettingsDependencies) {
     super({ noteLanguage: 'en', noteTemplate: 'soap' })
     this.storageKey = `userSettings.${deps.userId}`
-    deps.logger.created('userSettings')
+    logger.created('userSettings')
   }
 
   init() {
-    return this.deps.logger.traceInit('userSettings', async () => {
+    return logger.traceInit('userSettings', async () => {
       const remote = await this.deps.apiClient.getSettings()
       failIfRequested('userSettings')
       this.setState({ ...remote, ...this.deps.storage.get<UserSettings>(this.storageKey) })
@@ -48,16 +49,17 @@ class UserSettingsStore extends Store<UserSettings> implements UserSettingsServi
     try {
       const saved = await this.deps.apiClient.saveSettings(this.getState())
       this.deps.storage.set(this.storageKey, saved)
-      this.deps.notifier.notify({ kind: 'success', message: 'Preferences saved' })
+      notifier.notify({ kind: 'success', message: 'Preferences saved' })
     } catch (error) {
       this.setState(previous)
-      this.deps.notifier.notify({ kind: 'error', message: `Could not save: ${(error as Error).message}` })
+      reportError(error, { action: 'userSettings.update' })
+      notifier.notify({ kind: 'error', message: `Could not save: ${(error as Error).message}` })
     }
   }
 
   dispose() {
     this.clearListeners()
-    this.deps.logger.disposed('userSettings')
+    logger.disposed('userSettings')
   }
 }
 

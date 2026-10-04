@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { AppServices } from '#/bootstrap/bootstrapApp'
+import type { AppServices } from '#/services/app/bootstrapApp'
 
 /** Hands the already-bootstrapped app services to React. Nothing is created here. */
 export const AppServicesContext = createContext<AppServices | null>(null)

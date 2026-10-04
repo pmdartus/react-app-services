@@ -9,7 +9,7 @@ export const SEED_SETTINGS: UserSettings = {
   noteTemplate: 'soap',
 }
 
-export const SEED_ENCOUNTERS: Encounter[] = [
+export const SEED_ENCOUNTERS: (Encounter & { note: string })[] = [
   {
     id: 'enc-1',
     patientName: 'Emma Laurent',

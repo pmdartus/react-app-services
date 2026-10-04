@@ -1,7 +1,9 @@
-import type { Logger } from './logger'
-import type { Disposable } from './shared/disposable'
-import { fakeLatency } from './shared/delay'
-import { failIfRequested } from './shared/demoFlags'
+import type { Disposable } from '../shared/disposable'
+import { fakeLatency } from '../shared/delay'
+import { failIfRequested } from '../shared/demoFlags'
+import { logger as rootLogger } from '../global/logger'
+
+const logger = rootLogger.scope('app')
 
 /** Key/value persistence. Reads are synchronous once `init()` has loaded the data. */
 export interface StorageService extends Disposable {
@@ -11,21 +13,17 @@ export interface StorageService extends Disposable {
   remove(key: string): void
 }
 
-export interface StorageDependencies {
-  logger: Logger
-}
-
 const PREFIX = 'demo:'
 
 class KeyValueStorage implements StorageService {
   private readonly cache = new Map<string, unknown>()
 
-  constructor(private readonly deps: StorageDependencies) {
-    deps.logger.created('storage')
+  constructor() {
+    logger.created('storage')
   }
 
   init() {
-    return this.deps.logger.traceInit('storage', async () => {
+    return logger.traceInit('storage', async () => {
       await fakeLatency(400, 800) // pretend we're reading from a slow disk
       failIfRequested('storage')
 
@@ -53,10 +51,10 @@ class KeyValueStorage implements StorageService {
 
   dispose() {
     this.cache.clear()
-    this.deps.logger.disposed('storage')
+    logger.disposed('storage')
   }
 }
 
-export function createStorageService(deps: StorageDependencies): StorageService {
-  return new KeyValueStorage(deps)
+export function createStorageService(): StorageService {
+  return new KeyValueStorage()
 }

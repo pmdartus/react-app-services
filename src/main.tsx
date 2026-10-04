@@ -1,8 +1,9 @@
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
-import { bootstrapApp, type AppServices } from './bootstrap/bootstrapApp'
-import { AppServicesContext } from './react/AppServicesContext'
+import { bootstrapApp, type AppServices } from './services/app/bootstrapApp'
+import { reportError } from './services/global/errorReporter'
+import { AppServicesContext } from './context/AppServicesContext'
 import { Spinner } from './components/Spinner'
 import { ErrorScreen } from './components/ErrorScreen'
 import './styles.css'
@@ -29,6 +30,7 @@ async function start() {
     const app = await bootstrapApp()
     root.render(<App app={app} />)
   } catch (error) {
+    reportError(error, { scope: 'app' })
     root.render(<ErrorScreen error={error as Error} onRetry={start} />)
   }
 }

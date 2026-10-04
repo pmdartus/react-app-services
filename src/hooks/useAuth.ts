@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { useAppServices } from './AppServicesContext'
+import { useAppServices } from '#/context/AppServicesContext'
 
 export function useAuth() {
   const { auth } = useAppServices()

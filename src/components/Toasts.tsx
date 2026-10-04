@@ -1,4 +1,4 @@
-import { useNotifications } from '#/react/useNotifications'
+import { useNotifications } from '#/hooks/useNotifications'
 
 const KIND_STYLES = {
   success: 'border-l-emerald-500',

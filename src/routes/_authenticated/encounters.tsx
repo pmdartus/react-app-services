@@ -1,5 +1,5 @@
 import { Link, Outlet, createFileRoute } from '@tanstack/react-router'
-import { useEncounters } from '#/react/useEncounters'
+import { useEncounters } from '#/hooks/useEncounters'
 import { StatusBadge } from '#/components/StatusBadge'
 import { formatTime } from '#/components/format'
 

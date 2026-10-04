@@ -1,7 +1,11 @@
-import type { Disposable } from './shared/disposable'
-
-/** Colored, scope-prefixed console logger. The simplest possible service. */
-export interface Logger extends Disposable {
+/**
+ * Colored, scope-prefixed console logger.
+ *
+ * A module singleton: import `logger` from anywhere (services, routes, components).
+ * It has no dependencies, no async setup and nothing to tear down, so wiring it
+ * through every constructor would only add noise.
+ */
+export interface Logger {
   info(message: string, ...data: unknown[]): void
   error(message: string, ...data: unknown[]): void
   created(service: string, detail?: string): void
@@ -13,6 +17,7 @@ export interface Logger extends Disposable {
 }
 
 const SCOPE_COLORS: Record<string, string> = {
+  global: '#0891b2',
   app: '#2563eb',
   session: '#7c3aed',
   feature: '#ea580c',
@@ -57,10 +62,6 @@ class ConsoleLogger implements Logger {
     return new ConsoleLogger(name)
   }
 
-  dispose() {
-    this.disposed('logger')
-  }
-
   private print(color: string, message: string, data: unknown[] = []) {
     const scopeColor = SCOPE_COLORS[this.scopeName] ?? GRAY
     console.log(
@@ -72,8 +73,4 @@ class ConsoleLogger implements Logger {
   }
 }
 
-export function createLogger(scope = 'app'): Logger {
-  const logger = new ConsoleLogger(scope)
-  logger.created('logger')
-  return logger
-}
+export const logger: Logger = new ConsoleLogger('global')

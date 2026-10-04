@@ -9,7 +9,7 @@
     "dev": "vite dev --port 3000",
     "generate-routes": "tsr generate",
     "typecheck": "tsc -b",
-    "check:layers": "! grep -rnE \"from ['\\\"](react|react-dom|@tanstack/)\" src/services src/bootstrap",
+    "check:layers": "! grep -rnE \"from ['\\\"](react|react-dom|@tanstack/)\" src/services",
     "build": "npm run check:layers && tsc -b && vite build",
     "preview": "vite preview"
   },

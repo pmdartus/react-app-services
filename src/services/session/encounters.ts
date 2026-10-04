@@ -1,9 +1,12 @@
 import type { ApiClient, Encounter } from './apiClient'
-import type { Logger } from './logger'
-import type { NotifierService } from './notifier'
-import type { Disposable } from './shared/disposable'
-import { Store } from './shared/store'
-import { createRecordingSession, type RecordingSession } from './recordingSession'
+import type { Disposable } from '../shared/disposable'
+import { Store } from '../shared/store'
+import { logger as rootLogger } from '../global/logger'
+import { notifier } from '../global/notifier'
+import { reportError } from '../global/errorReporter'
+import { createRecordingSession, type RecordingSession } from '../feature/recordingSession'
+
+const logger = rootLogger.scope('session')
 
 export type { Encounter }
 
@@ -18,6 +21,11 @@ export interface EncountersService extends Disposable {
   subscribe(listener: () => void): () => void
   getState(): EncountersState
   getById(id: string): Encounter | undefined
+  /**
+   * Fetched on first call, then cached. Returns the *same* promise every time,
+   * so a component can `use()` it and suspend while it loads.
+   */
+  getNote(id: string): Promise<string>
   startRecording(encounterId: string): void
   /** A recording belongs to the open encounter: opening another one (or none) disposes it. */
   openEncounter(encounterId: string | null): void
@@ -26,18 +34,18 @@ export interface EncountersService extends Disposable {
 
 export interface EncountersDependencies {
   apiClient: ApiClient
-  notifier: NotifierService
-  logger: Logger
 }
 
 class Encounters extends Store<EncountersState> implements EncountersService {
+  private readonly notes = new Map<string, Promise<string>>()
+
   constructor(private readonly deps: EncountersDependencies) {
     super({ list: [], recording: null })
-    deps.logger.created('encounters')
+    logger.created('encounters')
   }
 
   init() {
-    return this.deps.logger.traceInit('encounters', async () => {
+    return logger.traceInit('encounters', async () => {
       const list = await this.deps.apiClient.listEncounters()
       this.setState({ ...this.getState(), list })
     })
@@ -45,12 +53,19 @@ class Encounters extends Store<EncountersState> implements EncountersService {
 
   getById = (id: string) => this.getState().list.find((encounter) => encounter.id === id)
 
+  getNote = (id: string) => {
+    let note = this.notes.get(id)
+    if (!note) {
+      note = this.deps.apiClient.getEncounterNote(id)
+      this.notes.set(id, note)
+    }
+    return note
+  }
+
   startRecording = (encounterId: string) => {
     this.disposeRecording()
     const recording = createRecordingSession({
       encounterId,
-      notifier: this.deps.notifier,
-      logger: this.deps.logger.scope('feature'),
       onComplete: () => this.markCompleted(encounterId),
     })
     this.setState({ ...this.getState(), recording })
@@ -71,7 +86,7 @@ class Encounters extends Store<EncountersState> implements EncountersService {
   dispose() {
     this.disposeRecording() // cascading teardown: the feature scope goes first
     this.clearListeners()
-    this.deps.logger.disposed('encounters')
+    logger.disposed('encounters')
   }
 
   private async markCompleted(encounterId: string) {
@@ -80,7 +95,8 @@ class Encounters extends Store<EncountersState> implements EncountersService {
       const list = this.getState().list.map((e) => (e.id === encounterId ? updated : e))
       this.setState({ ...this.getState(), list })
     } catch (error) {
-      this.deps.notifier.notify({ kind: 'error', message: (error as Error).message })
+      reportError(error, { action: 'encounters.markCompleted', encounterId })
+      notifier.notify({ kind: 'error', message: (error as Error).message })
     }
   }
 }

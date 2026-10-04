@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { useSessionServices } from './useSession'
+import { useSessionServices } from '#/context/SessionServicesContext'
 
 export function useUserSettings() {
   const { userSettings } = useSessionServices()

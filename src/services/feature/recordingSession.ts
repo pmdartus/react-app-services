@@ -1,7 +1,9 @@
-import type { Logger } from './logger'
-import type { NotifierService } from './notifier'
-import type { Disposable } from './shared/disposable'
-import { Store } from './shared/store'
+import type { Disposable } from '../shared/disposable'
+import { Store } from '../shared/store'
+import { logger as rootLogger } from '../global/logger'
+import { notifier } from '../global/notifier'
+
+const logger = rootLogger.scope('feature')
 
 export interface RecordingState {
   status: 'recording' | 'stopped'
@@ -19,8 +21,6 @@ export interface RecordingSession extends Disposable {
 
 export interface RecordingSessionDependencies {
   encounterId: string
-  notifier: NotifierService
-  logger: Logger
   onComplete: (transcript: string[]) => void
 }
 
@@ -47,24 +47,24 @@ class Recording extends Store<RecordingState> implements RecordingSession {
     super({ status: 'recording', elapsedMs: 0, transcript: [] })
     this.encounterId = deps.encounterId
     this.interval = setInterval(this.tick, TICK_MS)
-    deps.logger.created('recordingSession', `encounter ${deps.encounterId}`)
+    logger.created('recordingSession', `encounter ${deps.encounterId}`)
   }
 
   stop = () => {
     if (this.getState().status !== 'recording') return
     clearInterval(this.interval)
     this.setState({ ...this.getState(), status: 'stopped' })
-    this.deps.notifier.notify({ kind: 'success', message: 'Recording saved' })
+    notifier.notify({ kind: 'success', message: 'Recording saved' })
     this.deps.onComplete(this.getState().transcript)
   }
 
   dispose() {
     clearInterval(this.interval)
     if (this.getState().status === 'recording') {
-      this.deps.notifier.notify({ kind: 'info', message: 'Recording discarded' })
+      notifier.notify({ kind: 'info', message: 'Recording discarded' })
     }
     this.clearListeners()
-    this.deps.logger.disposed('recordingSession')
+    logger.disposed('recordingSession')
   }
 
   private tick = () => {

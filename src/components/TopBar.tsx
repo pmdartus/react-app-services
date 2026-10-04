@@ -1,13 +1,13 @@
 import { Link } from '@tanstack/react-router'
-import { useAuth } from '#/react/useAuth'
-import { useSessionState } from '#/react/useSession'
-import { useRecordingSession } from '#/react/useRecordingSession'
+import { useAuth } from '#/hooks/useAuth'
+import { useSession } from '#/hooks/useSession'
+import { useRecordingSession } from '#/hooks/useRecordingSession'
 import { formatElapsed, initials } from './format'
 
 /** Only depends on app services, so it keeps working while the session is loading or failed. */
 export function TopBar() {
   const auth = useAuth()
-  const session = useSessionState()
+  const session = useSession()
   if (auth.status !== 'signedIn') return null
 
   return (
@@ -17,7 +17,7 @@ export function TopBar() {
         Scribe
       </Link>
       <div className="flex-1" />
-      {session.status === 'ready' && <RecordingPill />}
+      {session?.status === 'ready' && <RecordingPill />}
       <Link
         to="/settings"
         className="text-sm text-slate-600 hover:text-slate-900"
