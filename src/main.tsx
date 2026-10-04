@@ -1,6 +1,4 @@
-import { Suspense, use } from 'react'
 import ReactDOM from 'react-dom/client'
-import { ErrorBoundary } from 'react-error-boundary'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { routeTree } from './routeTree.gen'
 import { bootstrapApp, type AppServices } from './bootstrap/bootstrapApp'
@@ -13,7 +11,7 @@ const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
   scrollRestoration: true,
-  context: { app: undefined! }, // provided by <App>, once bootstrapped
+  context: { app: undefined! }, // provided below, once bootstrapped
 })
 
 declare module '@tanstack/react-router' {
@@ -22,24 +20,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
-/**
- * Bootstrapping starts here, outside React. React only waits for the promise (Suspense)
- * and shows its failure (error boundary). Retry starts a fresh bootstrap.
- */
-function startApp(): Promise<AppServices> {
-  return bootstrapApp().then((app) => {
-    // When the session ends (sign-out), re-run the route guards so they redirect to /login.
-    app.session.subscribe(() => {
-      if (app.session.getState().status === 'idle') void router.invalidate()
-    })
-    return app
-  })
+const root = ReactDOM.createRoot(document.getElementById('app')!)
+
+/** Services are bootstrapped *before* React renders the app. React just displays the outcome. */
+async function start() {
+  root.render(<Spinner label="Starting app…" />)
+  try {
+    const app = await bootstrapApp()
+    root.render(<App app={app} />)
+  } catch (error) {
+    root.render(<ErrorScreen error={error as Error} onRetry={start} />)
+  }
 }
 
-let appPromise = startApp()
-
-function App() {
-  const app = use(appPromise)
+function App({ app }: { app: AppServices }) {
   return (
     <AppServicesContext value={app}>
       <RouterProvider router={router} context={{ app }} />
@@ -47,15 +41,4 @@ function App() {
   )
 }
 
-ReactDOM.createRoot(document.getElementById('app')!).render(
-  <ErrorBoundary
-    onReset={() => (appPromise = startApp())}
-    fallbackRender={({ error, resetErrorBoundary }) => (
-      <ErrorScreen error={error} onRetry={resetErrorBoundary} />
-    )}
-  >
-    <Suspense fallback={<Spinner label="Starting app…" />}>
-      <App />
-    </Suspense>
-  </ErrorBoundary>,
-)
+void start()

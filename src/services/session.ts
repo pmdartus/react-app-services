@@ -18,8 +18,6 @@ export interface SessionManager extends Disposable {
   init(): Promise<void>
   subscribe(listener: () => void): () => void
   getState(): SessionState
-  /** Resolves once the current session is ready; rejects if it fails or ends (sign-out). */
-  ready(): Promise<SessionServices>
   retry(): void
 }
 
@@ -47,20 +45,6 @@ class Session extends Store<SessionState> implements SessionManager {
       void this.syncWithAuth()
     })
   }
-
-  ready = () =>
-    new Promise<SessionServices>((resolve, reject) => {
-      const settle = () => {
-        const state = this.getState()
-        if (state.status === 'initializing') return // keep waiting
-        unsubscribe()
-        if (state.status === 'ready') resolve(state.services)
-        else if (state.status === 'error') reject(state.error)
-        else reject(new Error('Signed out'))
-      }
-      const unsubscribe = this.subscribe(settle)
-      settle()
-    })
 
   retry = () => {
     const auth = this.deps.auth.getState()

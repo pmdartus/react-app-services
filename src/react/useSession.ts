@@ -5,7 +5,8 @@ import { useAppServices } from './AppServicesContext'
 
 export function useSessionState() {
   const { session } = useAppServices()
-  return useSyncExternalStore(session.subscribe, session.getState)
+  const state = useSyncExternalStore(session.subscribe, session.getState)
+  return { ...state, retry: session.retry }
 }
 
 /** Only use under the authenticated layout, which renders its children once the session is ready. */

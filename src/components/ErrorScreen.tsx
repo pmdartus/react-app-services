@@ -1,5 +1,5 @@
 /** Shared by the app scope (main.tsx) and the session scope (_authenticated.tsx). */
-export function ErrorScreen({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+export function ErrorScreen({ error, onRetry }: { error: Error; onRetry: () => void }) {
   return (
     <div className="flex h-full flex-1 items-center justify-center p-6">
       <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -7,9 +7,7 @@ export function ErrorScreen({ error, onRetry }: { error: unknown; onRetry: () =>
           !
         </div>
         <h1 className="text-lg font-semibold text-slate-900">Something went wrong</h1>
-        <p className="mt-2 font-mono text-sm break-words text-slate-500">
-          {error instanceof Error ? error.message : String(error)}
-        </p>
+        <p className="mt-2 font-mono text-sm break-words text-slate-500">{error.message}</p>
         <button
           onClick={onRetry}
           className="mt-6 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-dark"
