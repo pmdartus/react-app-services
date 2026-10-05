@@ -1,6 +1,6 @@
 /**
  * Grey shapes standing in for screens (or parts of screens) that are about to load.
- * Routes declare theirs with `staticData.placeholder`; components use them as `<Suspense>` fallbacks.
+ * Routes use them as `pendingComponent` while their loader runs; components as `<Suspense>` fallbacks.
  */
 
 function Bar({ className = '' }: { className?: string }) {
@@ -43,29 +43,6 @@ export function NotePlaceholder() {
       <Bar className="w-full" />
       <Bar className="w-11/12" />
       <Bar className="w-3/5" />
-    </div>
-  )
-}
-
-export function SettingsPlaceholder() {
-  return (
-    <div className="flex-1">
-      <div className="mx-auto max-w-2xl space-y-6 px-6 py-8">
-        <Bar className="w-32" />
-        <Bar className="h-6 w-28" />
-        <div className="flex gap-6 border-b border-slate-200 pb-3">
-          <Bar className="w-14" />
-          <Bar className="w-20" />
-        </div>
-        <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
-          {Array.from({ length: 2 }, (_, index) => (
-            <div key={index} className="flex justify-between px-5 py-5">
-              <Bar className="w-20 bg-slate-100" />
-              <Bar className="w-36" />
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }

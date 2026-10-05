@@ -1,11 +1,31 @@
-import { Link, Outlet, createFileRoute } from '@tanstack/react-router'
+import { Link, Outlet, createFileRoute, useParams, useRouter, type ErrorComponentProps } from '@tanstack/react-router'
 import { useEncounters } from '#/hooks/useEncounters'
 import { StatusBadge } from '#/components/StatusBadge'
+import { EncountersPlaceholder } from '#/components/Placeholders'
+import { ErrorScreen } from '#/components/ErrorScreen'
 import { formatTime } from '#/components/format'
 
 export const Route = createFileRoute('/_authenticated/encounters')({
+  // The list is cached by `encounters`: only the first visit waits for it.
+  loader: ({ context }) => context.session.encounters.loadList(),
+  pendingMs: 0, // on a cold load there's nothing to keep showing meanwhile
+  pendingMinMs: 0,
+  pendingComponent: EncountersPending,
+  errorComponent: EncountersError,
   component: EncountersLayout,
 })
+
+/** This layout's placeholder, plus its child's when an encounter is being opened. */
+function EncountersPending() {
+  const { encounterId } = useParams({ strict: false })
+  return <EncountersPlaceholder detail={encounterId !== undefined} />
+}
+
+function EncountersError({ error }: ErrorComponentProps) {
+  const router = useRouter()
+  // Re-runs the loader: `encounters` didn't cache the failed load.
+  return <ErrorScreen error={error instanceof Error ? error : new Error(String(error))} onRetry={() => void router.invalidate()} />
+}
 
 function EncountersLayout() {
   const { list } = useEncounters()

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Outlet, createFileRoute, redirect, useMatches, useRouter } from '@tanstack/react-router'
+import { Outlet, createFileRoute, redirect, useChildMatches, useRouter } from '@tanstack/react-router'
 import { useAuth } from '#/hooks/useAuth'
 import { SessionServicesContext } from '#/context/SessionServicesContext'
 import { TopBar } from '#/components/TopBar'
@@ -25,11 +25,7 @@ export const Route = createFileRoute('/_authenticated')({
   },
   pendingMs: 0,
   pendingMinMs: 0,
-  pendingComponent: () => (
-    <Shell>
-      <ScreenPlaceholder />
-    </Shell>
-  ),
+  pendingComponent: SessionPending,
   errorComponent: SessionError,
   component: AuthenticatedLayout,
 })
@@ -44,6 +40,20 @@ function AuthenticatedLayout() {
       <Shell>{signedIn && <Outlet />}</Shell>
     </SessionServicesContext>
   )
+}
+
+/**
+ * The router shows the pending component of the topmost route that isn't on screen yet: this one,
+ * as long as the session or any child loader is running. So it shows the placeholder of the screen
+ * being opened, i.e. the `pendingComponent` of the first child route that declares one.
+ * Once this layout is on screen, child routes show their own (e.g. settings → encounters).
+ */
+function SessionPending() {
+  const router = useRouter()
+  const Placeholder = useChildMatches()
+    .map((match) => router.routesById[match.routeId].options.pendingComponent)
+    .find((component) => component !== undefined)
+  return <Shell>{Placeholder ? <Placeholder /> : <Spinner label="Loading your workspace…" />}</Shell>
 }
 
 function SessionError({ error }: { error: unknown }) {
@@ -68,10 +78,4 @@ function Shell({ children }: { children: ReactNode }) {
       <main className="flex min-h-0 flex-1">{children}</main>
     </div>
   )
-}
-
-/** The placeholder of the screen being opened: the deepest matched route that declares one. */
-function ScreenPlaceholder() {
-  const Placeholder = [...useMatches()].reverse().find((match) => match.staticData.placeholder)?.staticData.placeholder
-  return Placeholder ? <Placeholder /> : <Spinner label="Loading your workspace…" />
 }

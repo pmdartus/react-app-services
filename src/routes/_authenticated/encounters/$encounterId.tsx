@@ -4,7 +4,7 @@ import { useEncounterNote, useEncounters } from '#/hooks/useEncounters'
 import { useUserSettings } from '#/hooks/useUserSettings'
 import { StatusBadge } from '#/components/StatusBadge'
 import { formatTime } from '#/components/format'
-import { EncountersPlaceholder, NotePlaceholder } from '#/components/Placeholders'
+import { NotePlaceholder } from '#/components/Placeholders'
 import { ErrorBoundary } from '#/components/ErrorBoundary'
 
 export const Route = createFileRoute('/_authenticated/encounters/$encounterId')({
@@ -12,7 +12,6 @@ export const Route = createFileRoute('/_authenticated/encounters/$encounterId')(
   // Not awaited: the page shows right away, and the note suspends until it's there.
   // `encounters` caches the note, so running this again is free.
   loader: ({ context, params }) => context.session.encounters.openEncounter(params.encounterId),
-  staticData: { placeholder: () => <EncountersPlaceholder detail /> },
   component: EncounterDetail,
 })
 

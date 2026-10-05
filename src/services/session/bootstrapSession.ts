@@ -35,9 +35,10 @@ export async function bootstrapSession({ user, storage }: { user: User; storage:
     },
   }
 
-  // 2. Initialize. These two are independent of each other: run them concurrently.
+  // 2. Initialize what every screen needs. Data that only some screens need (the encounters list)
+  // is loaded by their routes instead.
   try {
-    await measured('bootstrapSession init', 'session', () => Promise.all([userSettings.init(), encounters.init()]))
+    await measured('bootstrapSession init', 'session', () => userSettings.init())
   } catch (error) {
     await services.dispose()
     throw error

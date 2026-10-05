@@ -11,7 +11,11 @@ export interface EncountersState {
 }
 
 export interface EncountersService extends Disposable {
-  init(): Promise<void>
+  /**
+   * Loads the list, on first call. Called by the router before showing the encounters screens.
+   * Returns the same promise while it's loading or once loaded. A failed load is forgotten, so calling again retries it.
+   */
+  loadList(): Promise<void>
   subscribe(listener: () => void): () => void
   getState(): EncountersState
   getById(id: string): Encounter | undefined
@@ -34,6 +38,7 @@ export interface EncountersDependencies {
 
 class Encounters extends Store<EncountersState> implements EncountersService {
   private readonly logger = rootLogger.scope('session')
+  private list: Promise<void> | null = null
   private readonly notes = new Map<string, Promise<string>>()
 
   constructor(private readonly deps: EncountersDependencies) {
@@ -41,12 +46,7 @@ class Encounters extends Store<EncountersState> implements EncountersService {
     this.logger.created('encounters')
   }
 
-  init() {
-    return this.logger.traceInit('encounters', async () => {
-      const list = await this.deps.apiClient.listEncounters()
-      this.setState({ ...this.getState(), list })
-    })
-  }
+  loadList = () => (this.list ??= this.fetchList())
 
   getById = (id: string) => this.getState().list.find((encounter) => encounter.id === id)
 
@@ -73,6 +73,17 @@ class Encounters extends Store<EncountersState> implements EncountersService {
   dispose() {
     this.clearListeners()
     this.logger.disposed('encounters')
+  }
+
+  private async fetchList() {
+    try {
+      const list = await this.deps.apiClient.listEncounters()
+      failIfRequested('encounters')
+      this.setState({ ...this.getState(), list })
+    } catch (error) {
+      this.list = null // not cached: the next `loadList()` retries
+      throw error
+    }
   }
 }
 

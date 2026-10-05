@@ -1,9 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { SettingsPlaceholder } from '#/components/Placeholders'
 import { useAuth } from '#/hooks/useAuth'
 
 export const Route = createFileRoute('/_authenticated/settings/profile')({
-  staticData: { placeholder: SettingsPlaceholder },
   component: ProfileTab,
 })
 
