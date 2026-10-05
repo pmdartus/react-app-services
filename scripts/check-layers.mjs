@@ -1,15 +1,14 @@
 // Enforces the dependency rule between service scopes (see README, "Where things live"):
 // - nothing under src/services imports React or TanStack;
-// - a scope uses its own scope and outer ones (feature → session → app → global → shared);
+// - a scope uses its own scope and outer ones (session → app → global → shared);
 // - only an owner may reach one scope inward, to create the child scope it owns.
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 
 const ROOT = 'src/services'
-const SCOPES = ['shared', 'global', 'app', 'session', 'feature'] // outermost first
+const SCOPES = ['shared', 'global', 'app', 'session'] // outermost first
 const OWNERS = {
   'app/auth.ts': 'session', // auth opens and closes the session
-  'session/encounters.ts': 'feature', // encounters starts and disposes the recording
 }
 
 const files = readdirSync(ROOT, { recursive: true }).filter((file) => file.endsWith('.ts'))

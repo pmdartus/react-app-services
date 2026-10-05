@@ -3,8 +3,6 @@ import { fakeLatency } from '../shared/delay'
 import { failIfRequested } from '../shared/demoFlags'
 import { logger as rootLogger } from '../global/logger'
 
-const logger = rootLogger.scope('app')
-
 /** Key/value persistence. Reads are synchronous once `init()` has loaded the data. */
 export interface StorageService extends Disposable {
   init(): Promise<void>
@@ -16,14 +14,15 @@ export interface StorageService extends Disposable {
 const PREFIX = 'demo:'
 
 class KeyValueStorage implements StorageService {
+  private readonly logger = rootLogger.scope('app')
   private readonly cache = new Map<string, unknown>()
 
   constructor() {
-    logger.created('storage')
+    this.logger.created('storage')
   }
 
   init() {
-    return logger.traceInit('storage', async () => {
+    return this.logger.traceInit('storage', async () => {
       await fakeLatency(400, 800) // pretend we're reading from a slow disk
       failIfRequested('storage')
 
@@ -51,7 +50,7 @@ class KeyValueStorage implements StorageService {
 
   dispose() {
     this.cache.clear()
-    logger.disposed('storage')
+    this.logger.disposed('storage')
   }
 }
 

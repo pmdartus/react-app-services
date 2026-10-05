@@ -7,7 +7,6 @@ export function useEncounters() {
   return {
     ...state,
     getById: encounters.getById,
-    startRecording: encounters.startRecording,
     invalidateNote: encounters.invalidateNote,
   }
 }

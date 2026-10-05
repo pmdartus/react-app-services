@@ -6,8 +6,6 @@ import { logger as rootLogger } from '../global/logger'
 import { reportError } from '../global/errorReporter'
 import { bootstrapSession, type SessionServices } from './bootstrapSession'
 
-const logger = rootLogger.scope('session')
-
 export type SessionState =
   | { status: 'loading' }
   | { status: 'ready'; services: SessionServices }
@@ -30,12 +28,14 @@ export interface SessionDependencies {
 }
 
 class UserSession extends Store<SessionState> implements Session {
+  private readonly logger = rootLogger.scope('session')
+
   // A session is single-use: once disposed (sign-out), a bootstrap that finishes late is discarded.
   private disposed = false
 
   constructor(private readonly deps: SessionDependencies) {
     super({ status: 'loading' })
-    logger.created('session', deps.user.email)
+    this.logger.created('session', deps.user.email)
   }
 
   init() {
@@ -52,7 +52,7 @@ class UserSession extends Store<SessionState> implements Session {
     const state = this.getState()
     this.clearListeners()
     if (state.status === 'ready') await state.services.dispose()
-    logger.disposed('session')
+    this.logger.disposed('session')
   }
 
   private async load() {
@@ -60,7 +60,7 @@ class UserSession extends Store<SessionState> implements Session {
     try {
       const services = await bootstrapSession(this.deps)
       if (this.disposed) {
-        logger.info('session signed out while loading, discarding its services')
+        this.logger.info('session signed out while loading, discarding its services')
         await services.dispose()
         return
       }

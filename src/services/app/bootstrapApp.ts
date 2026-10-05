@@ -1,4 +1,5 @@
 import type { Disposable } from '../shared/disposable'
+import { measured } from '../shared/perf'
 import { createStorageService, type StorageService } from './storage'
 import { createAuthService, type AuthService } from './auth'
 
@@ -32,8 +33,10 @@ export async function bootstrapApp(): Promise<AppServices> {
 
   // 2. Initialize, in dependency order.
   try {
-    await storage.init()
-    await auth.init() // restores the user from storage, which opens a session
+    await measured('bootstrapApp init', 'app', async () => {
+      await storage.init()
+      await auth.init() // restores the user from storage, which opens a session
+    })
   } catch (error) {
     await services.dispose()
     throw error

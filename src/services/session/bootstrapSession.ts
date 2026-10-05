@@ -1,4 +1,5 @@
 import type { Disposable } from '../shared/disposable'
+import { measured } from '../shared/perf'
 import type { User } from '../app/auth'
 import type { StorageService } from '../app/storage'
 import { createApiClient, type ApiClient } from './apiClient'
@@ -27,7 +28,7 @@ export async function bootstrapSession({ user, storage }: { user: User; storage:
     userSettings,
     encounters,
     async dispose() {
-      // Reverse creation order. `encounters` disposes its active recording first.
+      // Reverse creation order.
       await encounters.dispose()
       await userSettings.dispose()
       await apiClient.dispose()
@@ -36,7 +37,7 @@ export async function bootstrapSession({ user, storage }: { user: User; storage:
 
   // 2. Initialize. These two are independent of each other: run them concurrently.
   try {
-    await Promise.all([userSettings.init(), encounters.init()])
+    await measured('bootstrapSession init', 'session', () => Promise.all([userSettings.init(), encounters.init()]))
   } catch (error) {
     await services.dispose()
     throw error

@@ -1,10 +1,9 @@
 import type { User } from '../app/auth'
 import type { Disposable } from '../shared/disposable'
 import { fakeLatency } from '../shared/delay'
+import { measure } from '../shared/perf'
 import { logger as rootLogger } from '../global/logger'
 import { SEED_ENCOUNTERS, SEED_SETTINGS } from './apiClient.seed'
-
-const logger = rootLogger.scope('session')
 
 /** What the list shows. The note is heavier and fetched on its own, when an encounter is opened. */
 export interface Encounter {
@@ -24,7 +23,6 @@ export interface UserSettings {
 export interface ApiClient extends Disposable {
   listEncounters(): Promise<Encounter[]>
   getEncounterNote(id: string): Promise<string>
-  updateEncounter(id: string, patch: Partial<Encounter>): Promise<Encounter>
   getSettings(): Promise<UserSettings>
   saveSettings(settings: UserSettings): Promise<UserSettings>
 }
@@ -34,12 +32,13 @@ export interface ApiClientDependencies {
 }
 
 class FakeApiClient implements ApiClient {
+  private readonly logger = rootLogger.scope('session')
   private disposed = false
   private encounters = structuredClone(SEED_ENCOUNTERS)
   private settings = structuredClone(SEED_SETTINGS)
 
   constructor(deps: ApiClientDependencies) {
-    logger.created('apiClient', `token for ${deps.user.email}`)
+    this.logger.created('apiClient', `token for ${deps.user.email}`)
   }
 
   listEncounters() {
@@ -48,14 +47,6 @@ class FakeApiClient implements ApiClient {
 
   getEncounterNote(id: string) {
     return this.request(`GET /encounters/${id}/note`, () => this.encounters.find((e) => e.id === id)?.note ?? '', [600, 1200])
-  }
-
-  updateEncounter(id: string, patch: Partial<Encounter>) {
-    return this.request(`PATCH /encounters/${id}`, () => {
-      this.encounters = this.encounters.map((e) => (e.id === id ? { ...e, ...patch } : e))
-      const { note: _, ...updated } = this.encounters.find((e) => e.id === id)!
-      return updated
-    })
   }
 
   getSettings() {
@@ -68,21 +59,27 @@ class FakeApiClient implements ApiClient {
 
   dispose() {
     this.disposed = true
-    logger.disposed('apiClient')
+    this.logger.disposed('apiClient')
   }
 
   /** Every call: check we're alive, log, wait, check again (we may have been disposed meanwhile). */
   private async request<T>(endpoint: string, handler: () => T, [min, max] = [200, 500]): Promise<T> {
     this.assertNotDisposed(endpoint)
     const start = performance.now()
-    logger.info(`apiClient → ${endpoint}`)
+    this.logger.info(`apiClient → ${endpoint}`)
 
-    await fakeLatency(min, max)
-    this.assertNotDisposed(endpoint)
+    try {
+      await fakeLatency(min, max)
+      this.assertNotDisposed(endpoint)
 
-    const result = structuredClone(handler())
-    logger.info(`apiClient ← ${endpoint} 200 (${Math.round(performance.now() - start)}ms)`)
-    return result
+      const result = structuredClone(handler())
+      const ms = measure(endpoint, start, { track: 'apiClient' })
+      this.logger.info(`apiClient ← ${endpoint} 200 (${Math.round(ms)}ms)`)
+      return result
+    } catch (error) {
+      measure(`${endpoint} ✗`, start, { track: 'apiClient', color: 'error' })
+      throw error
+    }
   }
 
   private assertNotDisposed(endpoint: string) {

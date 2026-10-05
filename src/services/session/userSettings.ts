@@ -7,8 +7,6 @@ import { logger as rootLogger } from '../global/logger'
 import { notifier } from '../global/notifier'
 import { reportError } from '../global/errorReporter'
 
-const logger = rootLogger.scope('session')
-
 export type { UserSettings }
 
 /** The signed-in user's preferences. Drives the Preferences tab. */
@@ -26,17 +24,18 @@ export interface UserSettingsDependencies {
 }
 
 class UserSettingsStore extends Store<UserSettings> implements UserSettingsService {
+  private readonly logger = rootLogger.scope('session')
   // The fake backend forgets everything on logout, so local storage stands in for persistence.
   private readonly storageKey: string
 
   constructor(private readonly deps: UserSettingsDependencies) {
     super({ noteLanguage: 'en', noteTemplate: 'soap' })
     this.storageKey = `userSettings.${deps.userId}`
-    logger.created('userSettings')
+    this.logger.created('userSettings')
   }
 
   init() {
-    return logger.traceInit('userSettings', async () => {
+    return this.logger.traceInit('userSettings', async () => {
       const remote = await this.deps.apiClient.getSettings()
       failIfRequested('userSettings')
       this.setState({ ...remote, ...this.deps.storage.get<UserSettings>(this.storageKey) })
@@ -59,7 +58,7 @@ class UserSettingsStore extends Store<UserSettings> implements UserSettingsServi
 
   dispose() {
     this.clearListeners()
-    logger.disposed('userSettings')
+    this.logger.disposed('userSettings')
   }
 }
 

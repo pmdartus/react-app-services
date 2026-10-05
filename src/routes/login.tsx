@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
 import { useAuth } from '#/hooks/useAuth'
+import { reportError } from '#/services/global/errorReporter'
+import { notifier } from '#/services/global/notifier'
 
 export const Route = createFileRoute('/login')({
   beforeLoad: ({ context }) => {
-    if (context.app.auth.getState().status === 'signedIn') throw redirect({ to: '/encounters' })
+    const auth = context.app.auth.getState()
+    if (auth.status === 'signedIn') {
+      throw redirect({ to: '/encounters' })
+    }
   },
   component: LoginPage,
 })
@@ -12,14 +17,22 @@ export const Route = createFileRoute('/login')({
 function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+
   const [email, setEmail] = useState('claire.martin@clinic.example')
   const [pending, setPending] = useState(false)
 
-  async function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.SubmitEvent) {
     event.preventDefault()
-    setPending(true)
-    await login(email)
-    await navigate({ to: '/encounters' })
+    try {
+      setPending(true)
+      await login(email)
+      await navigate({ to: '/encounters' })
+    } catch (error) {
+      reportError(error, { action: 'auth.login' })
+      notifier.notify({ kind: 'error', message: `Could not sign in: ${(error as Error).message}` })
+    } finally {
+      setPending(false)
+    }
   }
 
   return (

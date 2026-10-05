@@ -1,12 +1,23 @@
 import ReactDOM from 'react-dom/client'
 import { RouterProvider } from '@tanstack/react-router'
-import { createAppRouter } from './router'
+
+import { initLogger } from './services/global/logger'
+import { initErrorReporter, reportError } from './services/global/errorReporter'
+import { initNotifier } from './services/global/notifier'
+
 import { bootstrapApp, type AppServices } from './services/app/bootstrapApp'
-import { reportError } from './services/global/errorReporter'
-import { AppServicesContext } from './context/AppServicesContext'
+
 import { Spinner } from './components/Spinner'
 import { ErrorScreen } from './components/ErrorScreen'
+import { AppServicesContext } from './context/AppServicesContext'
+
+import { createAppRouter } from './router'
 import './styles.css'
+
+// First, before anything logs, reports or notifies: create the global singletons with this app's details.
+initLogger({ scopeColors: { global: '#0891b2', app: '#2563eb', session: '#7c3aed' } })
+initErrorReporter({ tags: { app: 'scribe', environment: import.meta.env.MODE } })
+initNotifier({ autoDismissMs: 4000 })
 
 const root = ReactDOM.createRoot(document.getElementById('app')!)
 

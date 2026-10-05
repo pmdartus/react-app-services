@@ -1,5 +1,4 @@
 import { Store } from '../shared/store'
-import { logger } from './logger'
 
 export interface Toast {
   id: number
@@ -19,20 +18,21 @@ export interface Notifier {
   dismiss(id: number): void
 }
 
-const AUTO_DISMISS_MS = 4000
+export interface NotifierOptions {
+  autoDismissMs: number
+}
 
 class ToastNotifier extends Store<Toast[]> implements Notifier {
   private nextId = 1
 
-  constructor() {
+  constructor(private readonly options: NotifierOptions) {
     super([])
-    logger.created('notifier')
   }
 
   notify = (toast: Omit<Toast, 'id'>) => {
     const id = this.nextId++
     this.setState([...this.getState(), { id, ...toast }])
-    setTimeout(() => this.dismiss(id), AUTO_DISMISS_MS)
+    setTimeout(() => this.dismiss(id), this.options.autoDismissMs)
   }
 
   dismiss = (id: number) => {
@@ -40,4 +40,11 @@ class ToastNotifier extends Store<Toast[]> implements Notifier {
   }
 }
 
-export const notifier: Notifier = new ToastNotifier()
+/** Assigned by `initNotifier()`. Importers see it through the live binding, so don't use it while modules load. */
+export let notifier: Notifier
+
+/** Called once by the app's entry point, before anything notifies. Creates the notifier. */
+export function initNotifier(options: NotifierOptions) {
+  if (notifier) throw new Error('notifier is already initialized')
+  notifier = new ToastNotifier(options)
+}

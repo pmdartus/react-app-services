@@ -6,8 +6,6 @@ import { fakeLatency } from '../shared/delay'
 import { failIfRequested } from '../shared/demoFlags'
 import { logger as rootLogger } from '../global/logger'
 
-const logger = rootLogger.scope('app')
-
 export interface User {
   id: string
   email: string
@@ -16,8 +14,8 @@ export interface User {
 }
 
 /**
- * Signing in opens a session, signing out closes it. Auth owns the session the
- * same way `encounters` owns a recording: it holds the instance in its state.
+ * Signing in opens a session, signing out closes it. Auth owns the session:
+ * it holds the instance in its state.
  */
 export type AuthState = { status: 'signedOut' } | { status: 'signedIn'; user: User; session: Session }
 
@@ -37,19 +35,20 @@ export interface AuthDependencies {
 const USER_KEY = 'auth.user'
 
 class Auth extends Store<AuthState> implements AuthService {
+  private readonly logger = rootLogger.scope('app')
   constructor(private readonly deps: AuthDependencies) {
     super({ status: 'signedOut' })
-    logger.created('auth')
+    this.logger.created('auth')
   }
 
   init() {
-    return logger.traceInit('auth', async () => {
+    return this.logger.traceInit('auth', async () => {
       await fakeLatency(200, 400) // pretend we're validating the stored token
       failIfRequested('auth')
 
       const user = this.deps.storage.get<User>(USER_KEY)
       if (user) {
-        logger.info(`auth restored ${user.email} from storage`)
+        this.logger.info(`auth restored ${user.email} from storage`)
         this.signIn(user)
       }
     })
@@ -64,20 +63,20 @@ class Auth extends Store<AuthState> implements AuthService {
       token: crypto.randomUUID(),
     }
     this.deps.storage.set(USER_KEY, user)
-    logger.info(`auth signed in ${email}`)
+    this.logger.info(`auth signed in ${email}`)
     this.signIn(user)
   }
 
   logout = async () => {
     this.deps.storage.remove(USER_KEY)
-    logger.info('auth signed out')
+    this.logger.info('auth signed out')
     await this.closeSession()
   }
 
   async dispose() {
     await this.closeSession()
     this.clearListeners()
-    logger.disposed('auth')
+    this.logger.disposed('auth')
   }
 
   private signIn(user: User) {

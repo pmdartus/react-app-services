@@ -5,11 +5,6 @@ export function formatTime(iso: string): string {
   return isToday ? time : `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`
 }
 
-export function formatElapsed(ms: number): string {
-  const seconds = Math.floor(ms / 1000)
-  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
-}
-
 export function initials(name: string): string {
   return name
     .split(' ')

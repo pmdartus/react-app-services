@@ -8,7 +8,7 @@ export const Route = createFileRoute('/_authenticated/encounters')({
 })
 
 function EncountersLayout() {
-  const { list, recording } = useEncounters()
+  const { list } = useEncounters()
   return (
     <>
       <aside className="flex w-80 shrink-0 flex-col border-r border-slate-200 bg-white">
@@ -25,12 +25,7 @@ function EncountersLayout() {
               activeProps={{ className: 'bg-accent-light/60 hover:bg-accent-light/60' }}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2 font-medium text-slate-900">
-                  {recording?.encounterId === encounter.id && (
-                    <span className="size-2 animate-pulse rounded-full bg-red-500" title="Recording" />
-                  )}
-                  {encounter.patientName}
-                </span>
+                <span className="font-medium text-slate-900">{encounter.patientName}</span>
                 <span className="text-xs text-slate-400">{formatTime(encounter.startedAt)}</span>
               </div>
               <div className="mt-1 flex items-center justify-between gap-2">

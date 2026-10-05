@@ -1,13 +1,10 @@
 import { Link } from '@tanstack/react-router'
 import { useAuth } from '#/hooks/useAuth'
-import { useSession } from '#/hooks/useSession'
-import { useRecordingSession } from '#/hooks/useRecordingSession'
-import { formatElapsed, initials } from './format'
+import { initials } from './format'
 
-/** Usable while the session is loading or failed: only the recording pill needs session services. */
+/** Usable while the session is loading or failed: it only needs app services. */
 export function TopBar() {
   const auth = useAuth()
-  const session = useSession()
   if (auth.status !== 'signedIn') return null
 
   return (
@@ -17,7 +14,6 @@ export function TopBar() {
         Scribe
       </Link>
       <div className="flex-1" />
-      {session?.status === 'ready' && <RecordingPill />}
       <Link
         to="/settings"
         className="text-sm text-slate-600 hover:text-slate-900"
@@ -35,21 +31,5 @@ export function TopBar() {
         {initials(auth.user.name)}
       </div>
     </header>
-  )
-}
-
-/** Visible on every page: the recording outlives the encounter component. */
-function RecordingPill() {
-  const recording = useRecordingSession()
-  if (!recording || recording.status !== 'recording') return null
-  return (
-    <Link
-      to="/encounters/$encounterId"
-      params={{ encounterId: recording.encounterId }}
-      className="flex items-center gap-2 rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-700"
-    >
-      <span className="size-2 animate-pulse rounded-full bg-red-500" />
-      Recording {formatElapsed(recording.elapsedMs)}
-    </Link>
   )
 }

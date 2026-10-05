@@ -29,7 +29,7 @@ The demo app must make these three ideas **obvious when reading the code and vis
 
 ## 3. Domain
 
-A simplified Nabla clone. A clinician logs in, sees a list of **encounters** (patient visits) in a sidebar, opens one to see its **note**, and can **record** the encounter (fake: a timer and a fake transcript that grows over time). A **settings** page holds profile info and preferences.
+A simplified Nabla clone. A clinician logs in, sees a list of **encounters** (patient visits) in a sidebar, opens one to see its **note**. A **settings** page holds profile info and preferences.
 
 All data is fake and in-memory. Seed ~6–8 encounters (patient name, date/time, reason for visit, status `draft | completed`, a short note body).
 
@@ -53,7 +53,7 @@ Every service:
 
 | Service | Depends on | Responsibility / what it demonstrates |
 |---|---|---|
-| `logger` | — | Console logger. Colored, scope-prefixed lines, e.g. `[app] storage ✓ init (412ms)`, `[session] apiClient ✗ disposed`, `[feature] recordingSession created`. Supports a child logger per scope (`logger.scope('session')`). The simplest possible service. Not reactive. |
+| `logger` | — | Console logger. Colored, scope-prefixed lines, e.g. `[app] storage ✓ init (412ms)`, `[session] apiClient ✗ disposed`. Supports a child logger per scope (`logger.scope('session')`). The simplest possible service. Not reactive. |
 | `storage` | `logger` | Key/value persistence over `localStorage` with an async `init()` (fake ~400–800 ms delay) that loads persisted data into memory. Gives the initial spinner something to wait for. |
 | `notifier` | — | Toast notifications. Reactive (`subscribe` / `getState` → list of toasts). `notify({ kind, message })`, auto-dismiss after a few seconds. Callable from non-React code (other services use it). |
 | `auth` | `storage`, `logger` | Fake auth. State: `{ status: 'signedOut' } \| { status: 'signedIn', user }`. `init()` restores the user from `storage` (so a page reload keeps you logged in). `login(email)` (fake latency, any email works, derive a display name), `logout()`. Reactive. |
@@ -65,13 +65,7 @@ Every service:
 |---|---|---|
 | `apiClient` | `auth` user/token, `logger` | Fake in-memory backend with latency (~200–500 ms per call). Holds the seed data. Exists only while signed in. Every request is logged. After `dispose()`, any call throws ("apiClient disposed") — this makes teardown tangible. |
 | `userSettings` | `apiClient`, `storage` | `init()` fetches settings (fake latency). State: e.g. `{ noteLanguage: 'en' \| 'fr', noteTemplate: 'soap' \| 'narrative' }`. `update(patch)` saves via `apiClient` and notifies. Reactive. Drives the Preferences tab. |
-| `encounters` | `apiClient`, `notifier`, `logger` | List + get-by-id for encounters; reactive list state. Also **owns the feature scope**: `startRecording(encounterId)` creates a `recordingSession`, `stopRecording()` disposes it. On its own `dispose()` it disposes any active `recordingSession` (cascading teardown on logout). |
-
-### 4.3 Feature scope — one per recording
-
-| Service | Depends on | Responsibility / what it demonstrates |
-|---|---|---|
-| `recordingSession` | `encounters` (or the encounter id + an `onComplete` callback), `notifier`, `logger` | Created when the user clicks **Record** on an encounter. State: `{ status: 'recording' \| 'stopped', elapsedMs, transcript: string[] }`, updated by a `setInterval` (timer + a fake transcript line every ~2 s). `stop()` finalizes (e.g. notifies "Recording saved"). `dispose()` clears the interval. Disposed when the user navigates away from the encounter **or** logs out. |
+| `encounters` | `apiClient`, `notifier`, `logger` | List + get-by-id for encounters; reactive list state. |
 
 Deliberately out of scope: i18n, gatekeeper/feature flags, encryption, FHIR/EHR, real auth.
 
@@ -114,7 +108,7 @@ export async function bootstrapApp(): Promise<AppServices> {
 
 - `SessionManager` is an **app-scoped service**, created in `bootstrapApp`. It subscribes to `auth`:
   - on `signedIn` → state `initializing` → `await bootstrapSession(app, user)` → state `ready` with the session services.
-  - on `signedOut` → dispose the current session services (reverse order, cascading into any `recordingSession`) → state `idle`.
+  - on `signedOut` → dispose the current session services (reverse order) → state `idle`.
   - on bootstrap failure → state `error` (with the error), plus `retry()`.
 - State: `{ status: 'idle' } | { status: 'initializing' } | { status: 'ready', services: SessionServices } | { status: 'error', error: Error }`.
 - Guard against races (e.g. logout while initializing → dispose what was created, don't end up `ready`). Keep it simple and commented.
@@ -140,8 +134,8 @@ The whole session lifecycle lives in plain TypeScript; React only reads `session
   }
   ```
   Bind methods (arrow-function class fields or `.bind`) so they can be passed directly.
-- `useRecordingSession()` / `useEncounters()` / `useUserSettings()` / `useNotifications()` / `useSessionState()` similarly.
-- Hooks must stay tiny. **No business logic in hooks or components**, no `useEffect` for orchestration, except the one effect that disposes the recording when leaving the encounter route (or equivalently, an `onLeave` in the route definition — prefer the router hook if it reads well).
+- `useEncounters()` / `useUserSettings()` / `useNotifications()` / `useSessionState()` similarly.
+- Hooks must stay tiny. **No business logic in hooks or components**, no `useEffect` for orchestration.
 
 ## 8. Routes & UI
 
@@ -153,7 +147,7 @@ File-based routes under `src/routes/`:
 /_authenticated                pathless layout. beforeLoad: redirect to /login if auth is signedOut.
                                Renders based on session state: initializing → spinner, error → error screen, ready → <Outlet/>.
   /encounters                  master/detail. Left: sidebar with encounter list (patient name, time, reason, status badge). Right: empty state "Select an encounter".
-  /encounters/$encounterId     detail pane: patient header, reason, note body, Record / Stop button with elapsed timer and live fake transcript.
+  /encounters/$encounterId     detail pane: patient header, reason, note body.
   /settings                    full-screen (no encounters sidebar), top tabs, back link to encounters. Redirects to /settings/profile.
     /settings/profile          read-only user info from auth (name, email) + "Log out" button.
     /settings/preferences      userSettings form (note language, note template). Saves via userSettings.update, toast on success.
@@ -183,7 +177,6 @@ src/
     apiClient.ts     (+ fake seed data, may live in apiClient.seed.ts)
     userSettings.ts
     encounters.ts
-    recordingSession.ts
   bootstrap/
     bootstrapApp.ts
     bootstrapSession.ts
@@ -201,14 +194,13 @@ The README doubles as the presenter's script and a self-guided tour. Contents:
 
 1. **One-paragraph intro**: what the demo shows and the three principles (framework-agnostic services, explicit bootstrapping, hooks as adapters).
 2. **Running it**: `npm install`, `npm run dev`, open DevTools console to see the lifecycle log.
-3. **Scope diagram** (ASCII or Mermaid): app scope → session scope → feature scope, with each service and its dependencies.
-4. **Code tour — suggested reading order** with file links and a one-line "what to notice" per step: a service (`services/auth.ts`) → `bootstrap/bootstrapApp.ts` → `services/session.ts` + `bootstrap/bootstrapSession.ts` → `react/` adapters → `routes/_authenticated.tsx` → `services/encounters.ts` + `recordingSession.ts`.
+3. **Scope diagram** (ASCII or Mermaid): app scope → session scope, with each service and its dependencies.
+4. **Code tour — suggested reading order** with file links and a one-line "what to notice" per step: a service (`services/auth.ts`) → `bootstrap/bootstrapApp.ts` → `services/session.ts` + `bootstrap/bootstrapSession.ts` → `react/` adapters → `routes/_authenticated.tsx` → `services/encounters.ts`.
 5. **Demo scenarios** to click through, each with what to look at in the UI and in the console:
    - Cold start: app spinner while `storage` / `auth` init.
    - Login: session spinner while `bootstrapSession` runs.
    - Reload while signed in: session restored from storage.
-   - Start a recording, then navigate to another encounter → recording disposed.
-   - Start a recording, then log out from settings → cascading teardown (recording → session services in reverse order), `apiClient` disposed.
+   - Log out from settings → session services disposed in reverse order, `apiClient` disposed.
    - `?fail=storage` → app-level error screen + Retry.
    - `?fail=userSettings` → session-level error screen + Retry; app services still healthy (toasts, logout work).
 6. **Rule of thumb** (short): keep visual/component-scoped concerns in React; extract a service when behavior must outlive a component, be shared outside a UI subtree, or be tested without React.
@@ -219,7 +211,7 @@ The README doubles as the presenter's script and a self-guided tour. Contents:
 - Nothing under `src/services/` or `src/bootstrap/` imports React.
 - All scenarios in §10.5 work as described, with clear console lifecycle logs (create / init / dispose per service, scope-prefixed).
 - Disposal order on logout is visibly reverse of creation order in the console.
-- No timers or subscriptions leak after logout (recording interval cleared, auth subscription of disposed services removed).
+- No timers or subscriptions leak after logout (auth subscription of disposed services removed).
 - Verify the scenarios in a real browser (the Playwright MCP tools are available for this) and check the console output.
 
 ## 12. Git workflow
