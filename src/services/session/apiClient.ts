@@ -2,6 +2,7 @@ import type { User } from '../app/auth'
 import type { Disposable } from '../shared/disposable'
 import { fakeLatency } from '../shared/delay'
 import { measure } from '../shared/perf'
+import { failIfRequested } from '../shared/demoFlags'
 import { logger as rootLogger } from '../global/logger'
 import { SEED_ENCOUNTERS, SEED_SETTINGS } from './apiClient.seed'
 
@@ -42,11 +43,18 @@ class FakeApiClient implements ApiClient {
   }
 
   listEncounters() {
-    return this.request('GET /encounters', () => this.encounters.map(({ note: _, ...encounter }) => encounter))
+    return this.request('GET /encounters', () => {
+      failIfRequested('encounters')
+      return this.encounters.map(({ note: _, ...encounter }) => encounter)
+    })
   }
 
   getEncounterNote(id: string) {
-    return this.request(`GET /encounters/${id}/note`, () => this.encounters.find((e) => e.id === id)?.note ?? '', [600, 1200])
+    const note = () => {
+      failIfRequested('note')
+      return this.encounters.find((e) => e.id === id)?.note ?? ''
+    }
+    return this.request(`GET /encounters/${id}/note`, note, [600, 1200])
   }
 
   getSettings() {

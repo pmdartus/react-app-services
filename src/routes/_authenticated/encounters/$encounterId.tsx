@@ -1,6 +1,4 @@
-import { Suspense } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
-import { useEncounterNote, useEncounters } from '#/hooks/useEncounters'
+import { Await, createFileRoute, notFound, useRouter } from '@tanstack/react-router'
 import { useUserSettings } from '#/hooks/useUserSettings'
 import { StatusBadge } from '#/components/StatusBadge'
 import { formatTime } from '#/components/format'
@@ -8,21 +6,32 @@ import { NotePlaceholder } from '#/components/Placeholders'
 import { ErrorBoundary } from '#/components/ErrorBoundary'
 
 export const Route = createFileRoute('/_authenticated/encounters/$encounterId')({
-  // Opening an encounter starts fetching its note, and so does hovering a link to it (preload).
-  // Not awaited: the page shows right away, and the note suspends until it's there.
-  // `encounters` caches the note, so running this again is free.
-  loader: ({ context, params }) => context.session.encounters.openEncounter(params.encounterId),
+  loader: async ({ context, params, parentMatchPromise }) => {
+    // Not awaited: the page shows right away, and `<Await>` shows a placeholder until the note is there.
+    // Started before looking the encounter up, so it loads alongside the list on a cold load.
+    const note = context.session.apiClient.getEncounterNote(params.encounterId)
+    const { loaderData: list } = await parentMatchPromise
+    const encounter = list?.find(({ id }) => id === params.encounterId)
+    if (!encounter) {
+      note.catch(() => {}) // nobody will render it
+      throw notFound()
+    }
+    return { encounter, note }
+  },
+  // Notes are read-only here: keep a loaded one (and the encounter) until it's invalidated.
+  staleTime: Infinity,
+  notFoundComponent: () => <div className="p-10 text-sm text-slate-500">Encounter not found.</div>,
   component: EncounterDetail,
 })
 
 function EncounterDetail() {
-  const { encounterId } = Route.useParams()
-  const { getById, invalidateNote } = useEncounters()
+  const { encounter, note } = Route.useLoaderData()
   const { settings } = useUserSettings()
-  const encounter = getById(encounterId)
+  const router = useRouter()
 
-  if (!encounter) {
-    return <div className="p-10 text-sm text-slate-500">Encounter not found.</div>
+  async function retryNote(reset: () => void) {
+    await router.invalidate({ filter: (match) => match.routeId === Route.id }) // fetch the note anew...
+    reset() // ...then render it again
   }
 
   return (
@@ -45,29 +54,17 @@ function EncounterDetail() {
           </span>
         </div>
         {/* Keyed so each encounter gets its own placeholder and its own error state. */}
-        <ErrorBoundary
-          key={encounter.id}
-          fallback={(error, reset) => (
-            <NoteError
-              error={error}
-              onRetry={() => {
-                invalidateNote(encounter.id) // forget the failed fetch...
-                reset() // ...and render again, which fetches it anew
-              }}
-            />
-          )}
-        >
-          <Suspense fallback={<NotePlaceholder />}>
-            <NoteBody encounterId={encounter.id} />
-          </Suspense>
+        <ErrorBoundary key={encounter.id} fallback={(error, reset) => <NoteError error={error} onRetry={() => void retryNote(reset)} />}>
+          <Await promise={note} fallback={<NotePlaceholder />}>
+            {(text) => <NoteBody note={text} />}
+          </Await>
         </ErrorBoundary>
       </section>
     </article>
   )
 }
 
-function NoteBody({ encounterId }: { encounterId: string }) {
-  const note = useEncounterNote(encounterId)
+function NoteBody({ note }: { note: string }) {
   return (
     <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm leading-relaxed whitespace-pre-line text-slate-700">
       {note}

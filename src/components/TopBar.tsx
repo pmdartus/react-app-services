@@ -1,11 +1,12 @@
 import { Link } from '@tanstack/react-router'
-import { useAuth } from '#/hooks/useAuth'
+import { useAuth, useLogout } from '#/hooks/useAuth'
 import { initials } from './format'
 
-/** Usable while the session is loading or failed: it only needs app services. */
+/** Usable while the session is loading or failed: it only needs the auth state. */
 export function TopBar() {
   const auth = useAuth()
-  if (auth.status !== 'signedIn') return null
+  const logout = useLogout()
+  if (auth.status !== 'signedIn') return null // only shown by the authenticated layout
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-5">
@@ -21,7 +22,7 @@ export function TopBar() {
       >
         Settings
       </Link>
-      <button onClick={auth.logout} className="text-sm text-slate-600 hover:text-slate-900">
+      <button onClick={logout} className="text-sm text-slate-600 hover:text-slate-900">
         Log out
       </button>
       <div

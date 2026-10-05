@@ -1,22 +1,22 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useAuth } from '#/hooks/useAuth'
+import { useLogout } from '#/hooks/useAuth'
 
 export const Route = createFileRoute('/_authenticated/settings/profile')({
   component: ProfileTab,
 })
 
 function ProfileTab() {
-  const auth = useAuth()
-  if (auth.status !== 'signedIn') return null
+  const { user } = Route.useRouteContext()
+  const logout = useLogout()
 
   return (
     <div className="space-y-6">
       <dl className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
-        <Field label="Name" value={auth.user.name} />
-        <Field label="Email" value={auth.user.email} />
+        <Field label="Name" value={user.name} />
+        <Field label="Email" value={user.email} />
       </dl>
       <button
-        onClick={auth.logout}
+        onClick={logout}
         className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
       >
         Log out

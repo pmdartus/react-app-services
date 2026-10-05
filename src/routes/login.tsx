@@ -1,22 +1,33 @@
 import { useState } from 'react'
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
-import { useAuth } from '#/hooks/useAuth'
+import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { reportError } from '#/services/global/errorReporter'
 import { notifier } from '#/services/global/notifier'
 
+interface LoginSearch {
+  /** Where to go once signed in: the page the user was turned away from (see `_authenticated.tsx`). */
+  redirect?: string
+}
+
 export const Route = createFileRoute('/login')({
-  beforeLoad: ({ context }) => {
-    const auth = context.app.auth.getState()
-    if (auth.status === 'signedIn') {
-      throw redirect({ to: '/encounters' })
+  validateSearch: (search: Record<string, unknown>): LoginSearch => ({
+    redirect: isAppPath(search.redirect) ? search.redirect : undefined,
+  }),
+  beforeLoad: ({ context, search }) => {
+    if (context.auth.status === 'signedIn') {
+      throw search.redirect ? redirect({ href: search.redirect }) : redirect({ to: '/encounters' })
     }
   },
   component: LoginPage,
 })
 
+/** Only paths of this app: `?redirect=https://evil.example` must not send the user away. */
+function isAppPath(value: unknown): value is string {
+  return typeof value === 'string' && value.startsWith('/') && new URL(value, location.origin).origin === location.origin
+}
+
 function LoginPage() {
-  const { login } = useAuth()
-  const navigate = useNavigate()
+  const { auth } = Route.useRouteContext({ select: (context) => context.app })
+  const router = useRouter()
 
   const [email, setEmail] = useState('claire.martin@clinic.example')
   const [pending, setPending] = useState(false)
@@ -25,8 +36,9 @@ function LoginPage() {
     event.preventDefault()
     try {
       setPending(true)
-      await login(email)
-      await navigate({ to: '/encounters' })
+      await auth.login(email)
+      // Signed in: this route's guard now redirects to where the user was headed.
+      await router.invalidate()
     } catch (error) {
       reportError(error, { action: 'auth.login' })
       notifier.notify({ kind: 'error', message: `Could not sign in: ${(error as Error).message}` })

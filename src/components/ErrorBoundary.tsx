@@ -5,7 +5,7 @@ interface Props {
   children: ReactNode
 }
 
-/** Catches what a `use()`d promise rejects with. React only offers this as a class component. */
+/** Catches what an `<Await>`ed promise rejects with. React only offers this as a class component. */
 export class ErrorBoundary extends Component<Props, { error: Error | null }> {
   state = { error: null as Error | null }
 

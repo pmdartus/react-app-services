@@ -5,11 +5,10 @@ import { initLogger } from './services/global/logger'
 import { initErrorReporter, reportError } from './services/global/errorReporter'
 import { initNotifier } from './services/global/notifier'
 
-import { bootstrapApp, type AppServices } from './services/app/bootstrapApp'
+import { bootstrapApp } from './services/app/bootstrapApp'
 
 import { Spinner } from './components/Spinner'
 import { ErrorScreen } from './components/ErrorScreen'
-import { AppServicesContext } from './context/AppServicesContext'
 
 import { createAppRouter } from './router'
 import './styles.css'
@@ -26,19 +25,12 @@ async function start() {
   root.render(<Spinner label="Starting app…" />)
   try {
     const app = await bootstrapApp()
-    root.render(<App app={app} router={createAppRouter(app)} />)
+    // The router context is the only way services reach routes and components.
+    root.render(<RouterProvider router={createAppRouter(app)} />)
   } catch (error) {
     reportError(error, { scope: 'app' })
     root.render(<ErrorScreen error={error as Error} onRetry={start} />)
   }
-}
-
-function App({ app, router }: { app: AppServices; router: ReturnType<typeof createAppRouter> }) {
-  return (
-    <AppServicesContext value={app}>
-      <RouterProvider router={router} />
-    </AppServicesContext>
-  )
 }
 
 void start()

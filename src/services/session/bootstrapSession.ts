@@ -4,13 +4,11 @@ import type { User } from '../app/auth'
 import type { StorageService } from '../app/storage'
 import { createApiClient, type ApiClient } from './apiClient'
 import { createUserSettingsService, type UserSettingsService } from './userSettings'
-import { createEncountersService, type EncountersService } from './encounters'
 
 /** Session-scoped services: they only exist while signed in. */
 export interface SessionServices extends Disposable {
   apiClient: ApiClient
   userSettings: UserSettingsService
-  encounters: EncountersService
 }
 
 /**
@@ -21,22 +19,19 @@ export async function bootstrapSession({ user, storage }: { user: User; storage:
   // 1. Wire.
   const apiClient = createApiClient({ user })
   const userSettings = createUserSettingsService({ userId: user.id, apiClient, storage })
-  const encounters = createEncountersService({ apiClient })
 
   const services: SessionServices = {
     apiClient,
     userSettings,
-    encounters,
     async dispose() {
       // Reverse creation order.
-      await encounters.dispose()
       await userSettings.dispose()
       await apiClient.dispose()
     },
   }
 
-  // 2. Initialize what every screen needs. Data that only some screens need (the encounters list)
-  // is loaded by their routes instead.
+  // 2. Initialize what every screen needs. Data that only some screens need (encounters, notes)
+  // is loaded and cached by their routes instead.
   try {
     await measured('bootstrapSession init', 'session', () => userSettings.init())
   } catch (error) {

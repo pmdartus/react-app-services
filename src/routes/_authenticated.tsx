@@ -1,27 +1,26 @@
 import type { ReactNode } from 'react'
 import { Outlet, createFileRoute, redirect, useChildMatches, useRouter } from '@tanstack/react-router'
 import { useAuth } from '#/hooks/useAuth'
-import { SessionServicesContext } from '#/context/SessionServicesContext'
 import { TopBar } from '#/components/TopBar'
 import { Spinner } from '#/components/Spinner'
 import { ErrorScreen } from '#/components/ErrorScreen'
 
 /**
  * Entering this layout waits for the session: `beforeLoad` awaits `session.ready()` and puts the
- * services in the route context, so every child route gets them (`context.session`), loaders included.
+ * services in the route context, so every child route gets them (`context.session`), loaders and
+ * components included.
  * - meanwhile it shows `pendingComponent` right away (`pendingMs: 0`): on a cold load there's no
  *   previous screen to keep showing, and a delay would leave the page blank;
  * - if the session fails, it shows `errorComponent`.
  * Navigations within the layout don't wait: `ready()` returns the already resolved promise.
  */
 export const Route = createFileRoute('/_authenticated')({
-  beforeLoad: async ({ context }) => {
-    // Also re-run on sign-out: the router is invalidated whenever auth changes (see `router.ts`).
-    const auth = context.app.auth.getState()
+  beforeLoad: async ({ context, location }) => {
+    const { auth } = context
     if (auth.status === 'signedOut') {
-      throw redirect({ to: '/login' })
+      throw redirect({ to: '/login', search: { redirect: location.href } })
     }
-    return { session: await auth.session.ready() }
+    return { user: auth.user, session: await auth.session.ready() }
   },
   pendingMs: 0,
   pendingMinMs: 0,
@@ -31,14 +30,10 @@ export const Route = createFileRoute('/_authenticated')({
 })
 
 function AuthenticatedLayout() {
-  const { session } = Route.useRouteContext()
-  // On sign-out, auth drops the session right away and disposes it, while the router redirects:
-  // stop rendering screens that use its services meanwhile.
-  const signedIn = useAuth().status === 'signedIn'
   return (
-    <SessionServicesContext value={session}>
-      <Shell>{signedIn && <Outlet />}</Shell>
-    </SessionServicesContext>
+    <Shell>
+      <Outlet />
+    </Shell>
   )
 }
 
@@ -70,7 +65,7 @@ function SessionError({ error }: { error: unknown }) {
   )
 }
 
-/** The top bar only needs app services: it stays usable while the session loads or failed. */
+/** The top bar only needs the auth state: it stays usable while the session loads or failed. */
 function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full flex-col">
