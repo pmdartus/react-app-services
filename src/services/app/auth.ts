@@ -85,7 +85,7 @@ class Auth extends Store<AuthState> implements AuthService {
     const session = createSession({ user, storage: this.deps.storage })
     this.setState({ status: 'signedIn', user, session })
     if (previous.status === 'signedIn') void previous.session.dispose() // at most one session at a time
-    // Not awaited: the session has its own loading state, and the UI shows placeholders meanwhile.
+    // Not awaited: the router waits on `session.ready()`, and shows placeholders meanwhile.
     void session.init()
   }
 

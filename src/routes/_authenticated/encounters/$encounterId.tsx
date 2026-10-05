@@ -1,7 +1,5 @@
 import { Suspense } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import type { RouterContext } from '#/routes/__root'
-import { getSessionServices } from '#/routes/-lib/getSessionServices'
 import { useEncounterNote, useEncounters } from '#/hooks/useEncounters'
 import { useUserSettings } from '#/hooks/useUserSettings'
 import { StatusBadge } from '#/components/StatusBadge'
@@ -9,15 +7,11 @@ import { formatTime } from '#/components/format'
 import { EncountersPlaceholder, NotePlaceholder } from '#/components/Placeholders'
 import { ErrorBoundary } from '#/components/ErrorBoundary'
 
-// Opening an encounter starts fetching its note.
-// `onStay` covers switching from one encounter to another (same route, new params).
-// On a cold load the session isn't ready yet, so this is a no-op and the note is fetched on render.
-const openEncounter = ({ context, params }: { context: RouterContext; params: { encounterId: string } }) =>
-  getSessionServices(context.app)?.encounters.openEncounter(params.encounterId)
-
 export const Route = createFileRoute('/_authenticated/encounters/$encounterId')({
-  onEnter: openEncounter,
-  onStay: openEncounter,
+  // Opening an encounter starts fetching its note, and so does hovering a link to it (preload).
+  // Not awaited: the page shows right away, and the note suspends until it's there.
+  // `encounters` caches the note, so running this again is free.
+  loader: ({ context, params }) => context.session.encounters.openEncounter(params.encounterId),
   staticData: { placeholder: () => <EncountersPlaceholder detail /> },
   component: EncounterDetail,
 })
