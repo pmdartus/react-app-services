@@ -1,12 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useLogout } from '#/hooks/useAuth'
+import { useLogout, useUser } from '#/hooks/useAuth'
 
 export const Route = createFileRoute('/_authenticated/settings/profile')({
   component: ProfileTab,
 })
 
 function ProfileTab() {
-  const { user } = Route.useRouteContext()
+  const user = useUser()
   const logout = useLogout()
 
   return (

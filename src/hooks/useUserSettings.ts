@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react'
-import { useRouteContext } from '@tanstack/react-router'
+import { useSessionServices } from './useServices'
 
 export function useUserSettings() {
-  const { userSettings } = useRouteContext({ from: '/_authenticated', select: (context) => context.session })
+  const { userSettings } = useSessionServices()
   const settings = useSyncExternalStore(userSettings.subscribe, userSettings.getState)
   return { settings, update: userSettings.update }
 }

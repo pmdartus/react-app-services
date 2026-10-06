@@ -1,4 +1,6 @@
 import { rootRouteId, useRouteContext, useRouter } from '@tanstack/react-router'
+import type { User } from '#/services/app/auth'
+import { useAppServices } from './useServices'
 
 /**
  * The auth state the current screens were loaded with: the root route snapshots it on every
@@ -8,10 +10,15 @@ export function useAuth() {
   return useRouteContext({ from: rootRouteId, select: (context) => context.auth })
 }
 
+/** The signed-in user: available under the authenticated layout. */
+export function useUser(): User {
+  return useRouteContext({ from: '/_authenticated', select: (context) => context.user })
+}
+
 /** Signs out, then leaves the authenticated screens. */
 export function useLogout() {
   const router = useRouter()
-  const { auth } = useRouteContext({ from: rootRouteId, select: (context) => context.app })
+  const { auth } = useAppServices()
   return async () => {
     await auth.logout()
     await router.navigate({ to: '/login' })

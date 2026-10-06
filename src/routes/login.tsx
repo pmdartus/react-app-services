@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
+import { useAppServices } from '#/hooks/useServices'
 import { reportError } from '#/services/global/errorReporter'
 import { notifier } from '#/services/global/notifier'
 
@@ -26,7 +27,7 @@ function isAppPath(value: unknown): value is string {
 }
 
 function LoginPage() {
-  const { auth } = Route.useRouteContext({ select: (context) => context.app })
+  const { auth } = useAppServices()
   const router = useRouter()
 
   const [email, setEmail] = useState('claire.martin@clinic.example')
