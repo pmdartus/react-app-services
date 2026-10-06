@@ -2,6 +2,8 @@ import type { Disposable } from '../shared/disposable'
 import { measured } from '../shared/perf'
 import type { User } from '../app/auth'
 import type { StorageService } from '../app/storage'
+import type { Notifier } from '../global/notifier'
+import type { ReportError } from '../global/errorReporter'
 import { createApiClient, type ApiClient } from './apiClient'
 import { createUserSettingsService, type UserSettingsService } from './userSettings'
 
@@ -11,14 +13,21 @@ export interface SessionServices extends Disposable {
   userSettings: UserSettingsService
 }
 
+export interface SessionBootstrapDependencies {
+  user: User
+  storage: StorageService
+  notifier: Notifier
+  reportError: ReportError
+}
+
 /**
  * Creates, wires and initializes the session services.
  * Called by `Session` on sign-in; disposed on sign-out.
  */
-export async function bootstrapSession({ user, storage }: { user: User; storage: StorageService }): Promise<SessionServices> {
+export async function bootstrapSession({ user, storage, notifier, reportError }: SessionBootstrapDependencies): Promise<SessionServices> {
   // 1. Wire.
   const apiClient = createApiClient({ user })
-  const userSettings = createUserSettingsService({ userId: user.id, apiClient, storage })
+  const userSettings = createUserSettingsService({ userId: user.id, apiClient, storage, notifier, reportError })
 
   const services: SessionServices = {
     apiClient,

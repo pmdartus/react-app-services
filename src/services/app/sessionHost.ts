@@ -1,5 +1,7 @@
 import type { AuthService, User } from './auth'
 import type { StorageService } from './storage'
+import type { Notifier } from '../global/notifier'
+import type { ReportError } from '../global/errorReporter'
 import { createSession, type Session } from '../session/session'
 import type { Disposable } from '../shared/disposable'
 import { logger as rootLogger } from '../global/logger'
@@ -25,6 +27,8 @@ export interface SessionHost extends Disposable {
 export interface SessionHostDependencies {
   auth: AuthService
   storage: StorageService
+  notifier: Notifier
+  reportError: ReportError
 }
 
 class UserSessionHost implements SessionHost {
@@ -65,7 +69,8 @@ class UserSessionHost implements SessionHost {
   private open(user: User) {
     void this.detach()?.dispose() // at most one session at a time
     // It creates the session (inner scope) and passes down what it needs from the app scope.
-    this.session = createSession({ user, storage: this.deps.storage })
+    const { storage, notifier, reportError } = this.deps
+    this.session = createSession({ user, storage, notifier, reportError })
     // Not awaited: the router waits on `session.ready()`, and shows placeholders meanwhile.
     void this.session.init()
   }

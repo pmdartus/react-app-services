@@ -3,7 +3,7 @@ import { RouterProvider } from '@tanstack/react-router'
 
 import { initLogger } from './services/global/logger'
 import { initErrorReporter, reportError } from './services/global/errorReporter'
-import { initNotifier } from './services/global/notifier'
+import { initNotifier, notifier } from './services/global/notifier'
 
 import { bootstrapApp } from './services/app/bootstrapApp'
 
@@ -24,7 +24,8 @@ const root = ReactDOM.createRoot(document.getElementById('app')!)
 async function start() {
   root.render(<Spinner label="Starting app…" />)
   try {
-    const app = await bootstrapApp()
+    // Services don't import the globals that reach the user or the error reporter: they receive them.
+    const app = await bootstrapApp({ notifier, reportError })
     // The router context is the only way services reach routes and components.
     root.render(<RouterProvider router={createAppRouter(app)} />)
   } catch (error) {

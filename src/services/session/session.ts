@@ -1,9 +1,7 @@
 import type { User } from '../app/auth'
-import type { StorageService } from '../app/storage'
 import type { Disposable } from '../shared/disposable'
 import { logger as rootLogger } from '../global/logger'
-import { reportError } from '../global/errorReporter'
-import { bootstrapSession, type SessionServices } from './bootstrapSession'
+import { bootstrapSession, type SessionBootstrapDependencies, type SessionServices } from './bootstrapSession'
 
 /**
  * One signed-in session: from sign-in to sign-out. Created and disposed by `sessionHost`.
@@ -20,10 +18,8 @@ export interface Session extends Disposable {
   retry(): void
 }
 
-export interface SessionDependencies {
-  user: User
-  storage: StorageService
-}
+/** What the session needs is what its services need: it hands them all down to `bootstrapSession`. */
+export type SessionDependencies = SessionBootstrapDependencies
 
 class UserSession implements Session {
   private readonly logger = rootLogger.scope('session')
@@ -74,7 +70,7 @@ class UserSession implements Session {
     } catch (error) {
       if (!this.disposed) {
         this.failed = true
-        reportError(error, { scope: 'session', user: this.deps.user.email })
+        this.deps.reportError(error, { scope: 'session', user: this.deps.user.email })
       }
       throw error
     }

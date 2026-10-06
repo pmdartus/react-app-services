@@ -22,11 +22,14 @@ export function initErrorReporter(options: ErrorReporterOptions) {
   reporter = new ConsoleErrorReporter(options)
 }
 
+/** What services receive (injected) to report errors. */
+export type ReportError = (error: unknown, context?: Record<string, unknown>) => void
+
 /**
- * Stand-in for Sentry, Datadog & co. A module singleton: any code that catches
- * an error it can't handle calls `reportError()`, React or not.
+ * Stand-in for Sentry, Datadog & co. A module singleton: React code that catches an error it
+ * can't handle calls `reportError()` directly. Services receive it as a dependency instead.
  */
-export function reportError(error: unknown, context: Record<string, unknown> = {}): void {
+export const reportError: ReportError = (error, context = {}) => {
   if (!reporter) throw new Error('errorReporter used before initErrorReporter() was called')
   reporter.report(error, context)
 }

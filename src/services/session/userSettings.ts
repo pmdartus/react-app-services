@@ -4,8 +4,8 @@ import type { Disposable } from '../shared/disposable'
 import { Store } from '../shared/store'
 import { failIfRequested } from '../shared/demoFlags'
 import { logger as rootLogger } from '../global/logger'
-import { notifier } from '../global/notifier'
-import { reportError } from '../global/errorReporter'
+import type { Notifier } from '../global/notifier'
+import type { ReportError } from '../global/errorReporter'
 
 export type { UserSettings }
 
@@ -21,6 +21,8 @@ export interface UserSettingsDependencies {
   userId: string
   apiClient: ApiClient
   storage: StorageService
+  notifier: Notifier
+  reportError: ReportError
 }
 
 class UserSettingsStore extends Store<UserSettings> implements UserSettingsService {
@@ -48,11 +50,11 @@ class UserSettingsStore extends Store<UserSettings> implements UserSettingsServi
     try {
       const saved = await this.deps.apiClient.saveSettings(this.getState())
       this.deps.storage.set(this.storageKey, saved)
-      notifier.notify({ kind: 'success', message: 'Preferences saved' })
+      this.deps.notifier.notify({ kind: 'success', message: 'Preferences saved' })
     } catch (error) {
       this.setState(previous)
-      reportError(error, { action: 'userSettings.update' })
-      notifier.notify({ kind: 'error', message: `Could not save: ${(error as Error).message}` })
+      this.deps.reportError(error, { action: 'userSettings.update' })
+      this.deps.notifier.notify({ kind: 'error', message: `Could not save: ${(error as Error).message}` })
     }
   }
 

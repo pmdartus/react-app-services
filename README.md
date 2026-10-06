@@ -12,7 +12,7 @@ The folder says which scope a service belongs to, so it also says how long the s
 
 ```
 src/services/
-  global/    logger, notifier, errorReporter   module singletons: import them directly
+  global/    logger, notifier, errorReporter   module singletons: React imports them, services get them injected
   app/       storage, auth, bootstrapApp       created once, before React renders, then injected
   session/   session, apiClient, userSettings, encounters, bootstrapSession
                                                from sign-in to sign-out
@@ -30,13 +30,17 @@ src/hooks/    useAuth, useEncounters, useUserSettings, …    subscribe to them
 
 ### Global or injected?
 
-Not everything needs dependency injection. `logger`, `notifier` and `reportError` are **module singletons**: services, routes and components import them directly. That fits a service that:
+Not everything needs dependency injection. `logger`, `notifier` and `reportError` are **module singletons**: one instance for the whole page. That fits a service that:
 
 - has no dependencies on scoped services and no async setup,
 - lives as long as the page, so it never needs disposing,
 - is ambient: almost everything uses it, and passing it through every constructor only adds noise.
 
 Everything else is injected: services that need `init()` (`storage`), or hold per-user data (anything under `session/`).
+
+**A singleton is still injected into services.** Being global says how many instances exist, not how code reaches them. Routes, components and hooks import the globals directly: they only run once the app is up, and they're tied to this app anyway. Services receive `notifier` and `reportError` as dependencies instead: [`main.tsx`](src/main.tsx) hands them to `bootstrapApp({ notifier, reportError })`, which passes them down to the services that use them (`sessionHost` → `session` → `bootstrapSession` → `userSettings`). That keeps every dependency of a service in its `XxxDependencies` interface, and lets a test pass a fake instead of mocking a module. `check:layers` enforces it: outside `global/`, service code may only `import type` from `notifier` and `errorReporter`.
+
+`logger` is the exception: services still import it. It's used by every service and nobody asserts on log output, so passing it everywhere would only add noise.
 
 **Globals are configured by the entry point**, the way `Sentry.init()` or OpenTelemetry's setup is. The import is the same everywhere, but its behavior depends on app-specific information that only the app has. So each global exposes an `initXxx(options)` function that creates its instance, and [`main.tsx`](src/main.tsx) calls them first, before anything else runs:
 
@@ -46,11 +50,11 @@ initErrorReporter({ tags: { app: 'scribe', environment: import.meta.env.MODE } }
 initNotifier({ autoDismissMs: 4000 })
 ```
 
-Another app sharing the same globals passes its own values. `logger` and `notifier` are `export let` bindings that their init assigns, and ES modules let importers see the new value. **The rule: never use a global while modules load.** A module-level `const logger = rootLogger.scope('app')` would run before `main.tsx` calls `initLogger()`, so services create their scoped logger in a class field instead (`private readonly logger = rootLogger.scope('app')`). Breaking the rule fails loudly at startup (`Cannot read properties of undefined`), and so does a missing init. TypeScript can't catch it, though: the binding is typed `Logger`, even though it's `undefined` until init.
+Another app sharing the same globals passes its own values. `logger` and `notifier` are `export let` bindings that their init assigns, and ES modules let importers see the new value. **The rule: never use a global while modules load.** Since services receive `notifier` and `reportError`, only `logger` is exposed to it there. A module-level `const logger = rootLogger.scope('app')` would run before `main.tsx` calls `initLogger()`, so services create their scoped logger in a class field instead (`private readonly logger = rootLogger.scope('app')`). Breaking the rule fails loudly at startup (`Cannot read properties of undefined`), and so does a missing init. TypeScript can't catch it, though: the binding is typed `Logger`, even though it's `undefined` until init.
 
 The trade-offs, which a real app should weigh:
 
-- **Tests.** A global can't be replaced per instance, so a test has to mock the module instead of passing a fake.
+- **Tests.** An imported global can't be replaced per instance, so a test has to mock the module instead of passing a fake. That's why services get `notifier` and `reportError` injected; for `logger`, the module mock is an acceptable cost.
 - **Configuration.** The entry point passes static, app-wide details (see above). Details that change at runtime, like the current user, would need a setter called from the session. Here `session.ts` passes the user by hand.
 - **UI copy in services.** Services call `notifier.notify({ message: 'Preferences saved' })` themselves. That's a deliberate shortcut: it shows that non-React code can reach the UI. In a larger app, services would return or throw, and callers would pick the wording (and the language).
 
@@ -86,7 +90,7 @@ Each service init, each bootstrap phase and each fake request is also recorded a
 
 ```mermaid
 flowchart TD
-  subgraph global["Global: module singletons, imported anywhere"]
+  subgraph global["Global: module singletons, imported by React code, injected into services (logger: imported)"]
     logger
     notifier
     errorReporter
@@ -118,7 +122,7 @@ flowchart TD
 
 ## Code tour: suggested reading order
 
-1. [`services/global/`](src/services/global/): the singletons. `export const logger = …`, `export const notifier = …`, `export function reportError(…)`. Nothing to wire, but each one has an `initXxx(options)` that creates the instance, and that [`main.tsx`](src/main.tsx) calls first, with this app's details.
+1. [`services/global/`](src/services/global/): the singletons. `export const logger = …`, `export const notifier = …`, `export function reportError(…)`. Each one has an `initXxx(options)` that creates the instance, and that [`main.tsx`](src/main.tsx) calls first, with this app's details. `main.tsx` then hands `notifier` and `reportError` to `bootstrapApp()`.
 2. [`services/app/auth.ts`](src/services/app/auth.ts): a typical injected service. Interface, `AuthDependencies`, class, `createAuthService` factory, `init` / `dispose`, reactive state through the [`Store`](src/services/shared/store.ts) helper. It also owns the session: `signIn()` creates one (closing any previous one), and `logout()` disposes it.
 3. [`services/app/bootstrapApp.ts`](src/services/app/bootstrapApp.ts): the composition root, in two steps. First it **wires** every service by hand (constructors only store dependencies) and writes `dispose()` in reverse creation order. Then it **initializes** them in dependency order. If an `init()` fails, it disposes everything and rethrows.
 4. [`main.tsx`](src/main.tsx): `bootstrapApp()` runs **before** React renders the app. React renders a spinner, an error screen, or the router. No `useEffect`.

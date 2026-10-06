@@ -3,10 +3,18 @@ import { measured } from '../shared/perf'
 import { createStorageService, type StorageService } from './storage'
 import { createAuthService, type AuthService } from './auth'
 import { createSessionHost, type SessionHost } from './sessionHost'
+import type { Notifier } from '../global/notifier'
+import type { ReportError } from '../global/errorReporter'
+
+/** The globals services use, handed in by the entry point. React code imports them directly instead. */
+export interface AppDependencies {
+  notifier: Notifier
+  reportError: ReportError
+}
 
 /**
  * App-scoped services: created once, before React renders, and injected.
- * (`logger`, `notifier` and `reportError` aren't here: they're global singletons, imported directly.)
+ * (`logger`, `notifier` and `reportError` aren't here: they're globals, created by the entry point.)
  */
 export interface AppServices extends Disposable {
   storage: StorageService
@@ -19,11 +27,11 @@ export interface AppServices extends Disposable {
  * Creates, wires and initializes the app-scoped services. Runs once, before React renders.
  * Resolves only when every service is initialized.
  */
-export async function bootstrapApp(): Promise<AppServices> {
+export async function bootstrapApp({ notifier, reportError }: AppDependencies): Promise<AppServices> {
   // 1. Wire: constructors only store their dependencies, nothing runs yet.
   const storage = createStorageService()
   const auth = createAuthService({ storage })
-  const sessionHost = createSessionHost({ auth, storage })
+  const sessionHost = createSessionHost({ auth, storage, notifier, reportError })
 
   const services: AppServices = {
     storage,
