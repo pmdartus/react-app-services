@@ -13,7 +13,8 @@ const OWNERS = {
 }
 const INJECTED = ['global/notifier', 'global/errorReporter'] // `logger` stays a plain import
 
-const files = readdirSync(ROOT, { recursive: true }).filter((file) => file.endsWith('.ts'))
+// Tests aren't services: they may reach any scope, e.g. to stub the session `sessionHost` opens.
+const files = readdirSync(ROOT, { recursive: true }).filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
 const errors = []
 
 for (const file of files) {

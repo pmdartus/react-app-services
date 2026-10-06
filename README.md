@@ -11,7 +11,11 @@ A small medical scribe app (encounters, notes, settings) built to show one idea:
 npm install
 npm run dev            # http://localhost:3000
 npm run build          # check:layers → tsc -b → vite build
+npm test               # unit tests (Vitest)
+npm run test:e2e       # key flows in a browser (Playwright, starts the dev server)
 ```
+
+Most tests are unit tests of the services, next to them (`*.test.ts`): they run without rendering anything, and get fakes for their dependencies ([`src/test/fakes.ts`](src/test/fakes.ts)). The few Playwright tests in [`e2e/`](e2e) cover the key flows end to end: signing in and out, browsing encounters, saving preferences, and recovering from failures.
 
 ## Service types
 
