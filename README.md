@@ -56,7 +56,7 @@ Conventions:
 
 **Not every service needs to be reactive.** Only `userSettings` and `notifier` hold state the UI must follow, so only they extend `Store`. The others (`storage`, `auth`, `sessionHost`, `apiClient`) are plain objects with methods and promises. The router reads them on navigation, and loaders await them. Make a service reactive only when a screen has to re-render when its state changes.
 
-**`Store` is a placeholder, not a recommendation.** It's the smallest thing that works with `useSyncExternalStore`, used here for lack of a better standard. Any reactivity primitive that lives outside React fits the same pattern: signals (Preact Signals, the TC39 proposal), observables (RxJS), MobX, or a vanilla Zustand / Jotai store. Only the hooks need to change.
+**`Store` is a placeholder, not a recommendation.** It's the smallest thing that works with `useSyncExternalStore`, used here for lack of a better standard. Any reactivity primitive that lives outside React fits the same pattern: signals (Preact Signals, the TC39 proposal), observables (RxJS), MobX, or a vanilla Zustand / Jotai store. Swapping it changes how services expose state and how hooks read it, not who owns the services or how their lifecycle works.
 - **No cycles.** A service uses its own scope and outer ones (`session` → `app` → `global` → `shared`). Only an *owner* may reach one scope inward to create it, and the only owner is `sessionHost`.
 
 **Bootstrap functions are the composition roots** ([`bootstrapApp.ts`](src/services/app/bootstrapApp.ts), [`bootstrapSession.ts`](src/services/session/bootstrapSession.ts)). They:
