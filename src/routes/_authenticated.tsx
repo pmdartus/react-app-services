@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Outlet, createFileRoute, redirect, useChildMatches, useRouter } from '@tanstack/react-router'
-import { useAuth } from '#/hooks/useAuth'
+import { useAppServices } from '#/hooks/useServices'
 import { TopBar } from '#/components/TopBar'
 import { Spinner } from '#/components/Spinner'
 import { ErrorScreen } from '#/components/ErrorScreen'
@@ -16,11 +16,12 @@ import { ErrorScreen } from '#/components/ErrorScreen'
  */
 export const Route = createFileRoute('/_authenticated')({
   beforeLoad: async ({ context, location }) => {
-    const { auth } = context
-    if (auth.status === 'signedOut') {
+    // There's a session exactly while someone is signed in: no session, no way in.
+    const session = context.app.sessionHost.current()
+    if (!session) {
       throw redirect({ to: '/login', search: { redirect: location.href } })
     }
-    return { user: auth.user, session: await auth.session.ready() }
+    return { user: session.user, session: await session.ready() }
   },
   pendingMs: 0,
   pendingMinMs: 0,
@@ -52,10 +53,10 @@ function SessionPending() {
 }
 
 function SessionError({ error }: { error: unknown }) {
-  const auth = useAuth()
+  const { sessionHost } = useAppServices()
   const router = useRouter()
   const retry = () => {
-    if (auth.status === 'signedIn') auth.session.retry() // start a new bootstrap...
+    sessionHost.current()?.retry() // start a new bootstrap...
     void router.invalidate() // ...and re-run `beforeLoad`, which waits for it
   }
   return (

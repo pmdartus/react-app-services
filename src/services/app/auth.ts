@@ -1,5 +1,4 @@
 import type { StorageService } from './storage'
-import { createSession, type Session } from '../session/session'
 import type { Disposable } from '../shared/disposable'
 import { Store } from '../shared/store'
 import { fakeLatency } from '../shared/delay'
@@ -13,11 +12,8 @@ export interface User {
   token: string
 }
 
-/**
- * Signing in opens a session, signing out closes it. Auth owns the session:
- * it holds the instance in its state.
- */
-export type AuthState = { status: 'signedOut' } | { status: 'signedIn'; user: User; session: Session }
+/** Who is signed in. Plain data: the session that goes with it is owned by `sessionHost`. */
+export type AuthState = { status: 'signedOut' } | { status: 'signedIn'; user: User }
 
 /** Fake authentication. Any email works; the user is persisted across reloads. */
 export interface AuthService extends Disposable {
@@ -49,7 +45,7 @@ class Auth extends Store<AuthState> implements AuthService {
       const user = this.deps.storage.get<User>(USER_KEY)
       if (user) {
         this.logger.info(`auth restored ${user.email} from storage`)
-        this.signIn(user)
+        this.setState({ status: 'signedIn', user })
       }
     })
   }
@@ -64,35 +60,18 @@ class Auth extends Store<AuthState> implements AuthService {
     }
     this.deps.storage.set(USER_KEY, user)
     this.logger.info(`auth signed in ${email}`)
-    this.signIn(user)
+    this.setState({ status: 'signedIn', user })
   }
 
   logout = async () => {
     this.deps.storage.remove(USER_KEY)
     this.logger.info('auth signed out')
-    await this.closeSession()
+    this.setState({ status: 'signedOut' })
   }
 
-  async dispose() {
-    await this.closeSession()
+  dispose() {
     this.clearListeners()
     this.logger.disposed('auth')
-  }
-
-  private signIn(user: User) {
-    const previous = this.getState()
-    // Auth owns the session: it creates it (inner scope) and passes down what it needs from the app scope.
-    const session = createSession({ user, storage: this.deps.storage })
-    this.setState({ status: 'signedIn', user, session })
-    if (previous.status === 'signedIn') void previous.session.dispose() // at most one session at a time
-    // Not awaited: the router waits on `session.ready()`, and shows placeholders meanwhile.
-    void session.init()
-  }
-
-  private async closeSession() {
-    const previous = this.getState()
-    this.setState({ status: 'signedOut' }) // the UI stops using the session right away...
-    if (previous.status === 'signedIn') await previous.session.dispose() // ...then it's torn down
   }
 }
 

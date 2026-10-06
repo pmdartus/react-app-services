@@ -6,10 +6,12 @@ import { reportError } from '../global/errorReporter'
 import { bootstrapSession, type SessionServices } from './bootstrapSession'
 
 /**
- * One signed-in session: from sign-in to sign-out. Created and disposed by `auth`.
+ * One signed-in session: from sign-in to sign-out. Created and disposed by `sessionHost`.
  * Bootstraps the session services. The router waits on `ready()` before showing the screens that need them.
  */
 export interface Session extends Disposable {
+  /** Whose session it is: a user and their services always come together. */
+  readonly user: User
   /** Starts the bootstrap. Resolves once it settled, whatever the outcome: failures are read from `ready()`. */
   init(): Promise<void>
   /** The services of the current attempt. Returns the same promise until `retry()` starts a new attempt. */
@@ -35,6 +37,10 @@ class UserSession implements Session {
 
   constructor(private readonly deps: SessionDependencies) {
     this.logger.created('session', deps.user.email)
+  }
+
+  get user() {
+    return this.deps.user
   }
 
   async init() {

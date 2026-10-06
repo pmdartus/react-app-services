@@ -2,6 +2,7 @@ import type { Disposable } from '../shared/disposable'
 import { measured } from '../shared/perf'
 import { createStorageService, type StorageService } from './storage'
 import { createAuthService, type AuthService } from './auth'
+import { createSessionHost, type SessionHost } from './sessionHost'
 
 /**
  * App-scoped services: created once, before React renders, and injected.
@@ -10,6 +11,7 @@ import { createAuthService, type AuthService } from './auth'
 export interface AppServices extends Disposable {
   storage: StorageService
   auth: AuthService
+  sessionHost: SessionHost
 }
 
 /**
@@ -20,12 +22,15 @@ export async function bootstrapApp(): Promise<AppServices> {
   // 1. Wire: constructors only store their dependencies, nothing runs yet.
   const storage = createStorageService()
   const auth = createAuthService({ storage })
+  const sessionHost = createSessionHost({ auth, storage }) // follows auth from now on
 
   const services: AppServices = {
     storage,
     auth,
+    sessionHost,
     async dispose() {
-      // Reverse creation order. `auth` closes the current session first.
+      // Reverse creation order. `sessionHost` closes the current session first.
+      await sessionHost.dispose()
       await auth.dispose()
       await storage.dispose()
     },
@@ -35,7 +40,7 @@ export async function bootstrapApp(): Promise<AppServices> {
   try {
     await measured('bootstrapApp init', 'app', async () => {
       await storage.init()
-      await auth.init() // restores the user from storage, which opens a session
+      await auth.init() // restores the user from storage, so `sessionHost` opens their session
     })
   } catch (error) {
     await services.dispose()

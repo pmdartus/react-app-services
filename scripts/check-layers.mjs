@@ -8,7 +8,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 const ROOT = 'src/services'
 const SCOPES = ['shared', 'global', 'app', 'session'] // outermost first
 const OWNERS = {
-  'app/auth.ts': 'session', // auth opens and closes the session
+  'app/sessionHost.ts': 'session', // opens and closes the session
 }
 
 const files = readdirSync(ROOT, { recursive: true }).filter((file) => file.endsWith('.ts'))
