@@ -53,6 +53,10 @@ Conventions:
 - **Constructor** only stores dependencies. No I/O, timers or subscriptions.
 - **`init()`** does the async setup. **`dispose()`** undoes it, and is safe to call even if `init()` never ran or failed.
 - **State** goes through the [`Store`](src/services/shared/store.ts) helper: `getState()` returns the same reference until `setState()` is called again.
+
+**Not every service needs to be reactive.** Only `userSettings` and `notifier` hold state the UI must follow, so only they extend `Store`. The others (`storage`, `auth`, `sessionHost`, `apiClient`) are plain objects with methods and promises. The router reads them on navigation, and loaders await them. Make a service reactive only when a screen has to re-render when its state changes.
+
+**`Store` is a placeholder, not a recommendation.** It's the smallest thing that works with `useSyncExternalStore`, used here for lack of a better standard. Any reactivity primitive that lives outside React fits the same pattern: signals (Preact Signals, the TC39 proposal), observables (RxJS), MobX, or a vanilla Zustand / Jotai store. Only the hooks need to change.
 - **No cycles.** A service uses its own scope and outer ones (`session` → `app` → `global` → `shared`). Only an *owner* may reach one scope inward to create it, and the only owner is `sessionHost`.
 
 **Bootstrap functions are the composition roots** ([`bootstrapApp.ts`](src/services/app/bootstrapApp.ts), [`bootstrapSession.ts`](src/services/session/bootstrapSession.ts)). They:
