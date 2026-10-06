@@ -118,6 +118,26 @@ Every child route then gets a non-null `context.session`, in its loader and its 
 
 **Load only what every screen needs.** `bootstrapSession` only initializes `userSettings`. Screen-specific data (the encounters list, a note) is loaded by the route loaders through `apiClient`, so opening Settings doesn't wait for encounters. On sign-out, `useLogout()` also clears the router cache, so the next user never sees the previous user's data.
 
+## How the app starts
+
+Startup is a chain of async steps. Each step has its own loading and error UI, and each one only blocks what depends on it.
+
+| Step | Where | Waits for | Loading UI | On failure |
+|---|---|---|---|---|
+| 1. Globals | `main.tsx`: `initLogger()`, `initNotifier()`, … | nothing (sync) | — | — |
+| 2. App services | `main.tsx`: `await bootstrapApp()` | `storage`, `auth`, `sessionHost` | full-page spinner | full-page error, Retry reruns `bootstrapApp()` |
+| 3. Router | `main.tsx`: renders `RouterProvider` with `context: { app }` | — | — | — |
+| 4. Session | `_authenticated` route: `await session.ready()` | `bootstrapSession()` | placeholder of the screen being opened | error inside the layout, top bar still works |
+| 5. Screen data | route `loader`, e.g. `/encounters` | `apiClient.listEncounters()` | that route's `pendingComponent` | that route's `errorComponent` |
+| 6. Part of a screen | `<Await>` on a promise the loader didn't await | e.g. an encounter's note | `<NotePlaceholder />` | an `ErrorBoundary` around it, with Retry |
+
+Some details:
+
+- **React renders nothing meaningful until step 2 resolves.** `main.tsx` renders a spinner, then either the router or an error screen. Nothing needs a `useEffect` or an "is the service ready?" check: by the time a component runs, its services exist.
+- **The app doesn't wait for the session.** `sessionHost.init()` starts the session bootstrap without awaiting it, so steps 2 and 4 overlap, and the router waits on `session.ready()` itself.
+- **Placeholders are shaped like the real screen** ([`components/Placeholders.tsx`](src/components/Placeholders.tsx)), so the layout doesn't jump. The router shows the `pendingComponent` of the topmost route that isn't on screen yet. On a cold load that's the session gate, which borrows the placeholder of the first child route that declares one (or shows a spinner, for screens like Settings that only need the session).
+- **Start fetches early, and await them as late as possible.** The encounter route starts fetching the note before it looks up the encounter, and returns the promise without awaiting it. The header renders right away, and only the note area waits.
+
 ## Try it
 
 Open the DevTools console: every service logs its lifecycle (`+ created`, `✓ init`, `✗ disposed`) with its scope. Init phases also show up as User Timing measures in the Performance panel.
