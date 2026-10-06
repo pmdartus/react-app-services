@@ -3,8 +3,9 @@ import type { AppServices } from '#/services/app/bootstrapApp'
 import type { SessionServices } from '#/services/session/bootstrapSession'
 
 /*
- * How components reach services. Where they're kept is an implementation detail: today it's the
- * router context, because route guards and loaders need them too (see `router.ts`, `_authenticated.tsx`).
+ * How components reach services. The bootstraps own them; React and the router only get references.
+ * How they're exposed is an implementation detail: today it's the router context, because route guards
+ * and loaders need them too (see `router.ts`, `_authenticated.tsx`).
  */
 
 /** App-scoped services: available everywhere. */
