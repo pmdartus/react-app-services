@@ -15,14 +15,16 @@ export function useUser(): User {
   return useRouteContext({ from: '/_authenticated', select: (context) => context.user })
 }
 
-/** Signs out, then leaves the authenticated screens. */
+/** Signs out, leaves the authenticated screens, and only then disposes the session they used. */
 export function useLogout() {
   const router = useRouter()
-  const { auth } = useAppServices()
-  return async () => {
-    await auth.logout()
-    await router.navigate({ to: '/login' })
-    // Loaders cache session data per route: don't show it to whoever signs in next.
-    router.clearCache()
-  }
+  const { sessionHost } = useAppServices()
+  return () =>
+    sessionHost.signOut({
+      beforeDispose: async () => {
+        await router.navigate({ to: '/login' })
+        // Loaders cache session data per route: don't show it to whoever signs in next.
+        router.clearCache()
+      },
+    })
 }

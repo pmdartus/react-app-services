@@ -10,7 +10,8 @@ import { createSessionHost, type SessionHost } from './sessionHost'
  */
 export interface AppServices extends Disposable {
   storage: StorageService
-  auth: AuthService
+  /** Read-only: signing in and out goes through `sessionHost`, which keeps the session in step. */
+  auth: Pick<AuthService, 'getState'>
   sessionHost: SessionHost
 }
 
@@ -22,7 +23,7 @@ export async function bootstrapApp(): Promise<AppServices> {
   // 1. Wire: constructors only store their dependencies, nothing runs yet.
   const storage = createStorageService()
   const auth = createAuthService({ storage })
-  const sessionHost = createSessionHost({ auth, storage }) // follows auth from now on
+  const sessionHost = createSessionHost({ auth, storage })
 
   const services: AppServices = {
     storage,
@@ -40,7 +41,8 @@ export async function bootstrapApp(): Promise<AppServices> {
   try {
     await measured('bootstrapApp init', 'app', async () => {
       await storage.init()
-      await auth.init() // restores the user from storage, so `sessionHost` opens their session
+      await auth.init() // restores the user from storage...
+      await sessionHost.init() // ...and this opens their session
     })
   } catch (error) {
     await services.dispose()

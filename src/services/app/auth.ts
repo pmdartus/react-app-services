@@ -1,6 +1,5 @@
 import type { StorageService } from './storage'
 import type { Disposable } from '../shared/disposable'
-import { Store } from '../shared/store'
 import { fakeLatency } from '../shared/delay'
 import { failIfRequested } from '../shared/demoFlags'
 import { logger as rootLogger } from '../global/logger'
@@ -15,13 +14,22 @@ export interface User {
 /** Who is signed in. Plain data: the session that goes with it is owned by `sessionHost`. */
 export type AuthState = { status: 'signedOut' } | { status: 'signedIn'; user: User }
 
-/** Fake authentication. Any email works; the user is persisted across reloads. */
+/**
+ * Fake authentication: who the user is, persisted across reloads. Any email works.
+ * Knows nothing about sessions: `sessionHost` calls `signIn()` / `signOut()` and opens or closes
+ * the session that goes with them.
+ */
 export interface AuthService extends Disposable {
+  /** Restores the persisted user, if any. */
   init(): Promise<void>
-  subscribe(listener: () => void): () => void
   getState(): AuthState
-  login(email: string): Promise<void>
-  logout(): Promise<void>
+  /**
+   * Authenticates and persists the user. Resolves with the user, or with `null` when a later
+   * `signIn()` or `signOut()` superseded this call: then it changes nothing.
+   */
+  signIn(email: string): Promise<User | null>
+  /** Forgets the user. Also cancels an in-flight `signIn()`. */
+  signOut(): void
 }
 
 export interface AuthDependencies {
@@ -30,10 +38,13 @@ export interface AuthDependencies {
 
 const USER_KEY = 'auth.user'
 
-class Auth extends Store<AuthState> implements AuthService {
+class Auth implements AuthService {
   private readonly logger = rootLogger.scope('app')
+  private state: AuthState = { status: 'signedOut' }
+  /** Bumped by every `signIn()` and `signOut()`: a `signIn()` only applies if it's still the latest call. */
+  private generation = 0
+
   constructor(private readonly deps: AuthDependencies) {
-    super({ status: 'signedOut' })
     this.logger.created('auth')
   }
 
@@ -45,13 +56,20 @@ class Auth extends Store<AuthState> implements AuthService {
       const user = this.deps.storage.get<User>(USER_KEY)
       if (user) {
         this.logger.info(`auth restored ${user.email} from storage`)
-        this.setState({ status: 'signedIn', user })
+        this.state = { status: 'signedIn', user }
       }
     })
   }
 
-  login = async (email: string) => {
+  getState = () => this.state
+
+  signIn = async (email: string) => {
+    const generation = ++this.generation
     await fakeLatency(400, 700)
+    if (generation !== this.generation) {
+      this.logger.info(`auth sign-in of ${email} superseded, ignored`)
+      return null
+    }
     const user: User = {
       id: email.toLowerCase(),
       email,
@@ -59,18 +77,19 @@ class Auth extends Store<AuthState> implements AuthService {
       token: crypto.randomUUID(),
     }
     this.deps.storage.set(USER_KEY, user)
+    this.state = { status: 'signedIn', user }
     this.logger.info(`auth signed in ${email}`)
-    this.setState({ status: 'signedIn', user })
+    return user
   }
 
-  logout = async () => {
+  signOut = () => {
+    this.generation++
     this.deps.storage.remove(USER_KEY)
+    this.state = { status: 'signedOut' }
     this.logger.info('auth signed out')
-    this.setState({ status: 'signedOut' })
   }
 
   dispose() {
-    this.clearListeners()
     this.logger.disposed('auth')
   }
 }

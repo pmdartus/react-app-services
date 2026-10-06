@@ -27,7 +27,7 @@ function isAppPath(value: unknown): value is string {
 }
 
 function LoginPage() {
-  const { auth } = useAppServices()
+  const { sessionHost } = useAppServices()
   const router = useRouter()
 
   const [email, setEmail] = useState('claire.martin@clinic.example')
@@ -37,11 +37,11 @@ function LoginPage() {
     event.preventDefault()
     try {
       setPending(true)
-      await auth.login(email)
+      await sessionHost.signIn(email)
       // Signed in: this route's guard now redirects to where the user was headed.
       await router.invalidate()
     } catch (error) {
-      reportError(error, { action: 'auth.login' })
+      reportError(error, { action: 'sessionHost.signIn' })
       notifier.notify({ kind: 'error', message: `Could not sign in: ${(error as Error).message}` })
     } finally {
       setPending(false)
