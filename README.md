@@ -4,7 +4,7 @@ A small medical scribe app (encounters, notes, settings) built to show one idea:
 
 - Services are classes behind an interface: state + commands + lifecycle (`init` / `dispose`).
 - Nothing under `src/services/` imports React or TanStack (`npm run check:layers` enforces it).
-- Services are created by plain bootstrap functions, not by provider nesting or `useEffect`.
+- Services and their state are **owned outside React and the router**: plain bootstrap functions create and dispose them, not providers, routes or `useEffect`.
 - Hooks are thin adapters: get the service, `useSyncExternalStore`, return state + commands.
 
 ```sh
@@ -76,7 +76,7 @@ export function useUserSettings() {
 }
 ```
 
-The services are stored in the router context (route guards and loaders need them too), but components don't need to know that.
+**Owned outside, exposed inside.** The bootstraps own the services, and `sessionHost` owns the session. React and the router only receive references to them: `main.tsx` passes the app services into the router context, so route guards, loaders and components can all reach them. The router never creates or disposes a service, and replacing it wouldn't change who owns what.
 
 ## Session-bound services
 
@@ -126,7 +126,7 @@ Startup is a chain of async steps. Each step has its own loading and error UI, a
 |---|---|---|---|---|
 | 1. Globals | `main.tsx`: `initLogger()`, `initNotifier()`, … | nothing (sync) | — | — |
 | 2. App services | `main.tsx`: `await bootstrapApp()` | `storage`, `auth`, `sessionHost` | full-page spinner | full-page error, Retry reruns `bootstrapApp()` |
-| 3. Router | `main.tsx`: renders `RouterProvider` with `context: { app }` | — | — | — |
+| 3. Router | `main.tsx`: renders `RouterProvider`, exposing the app services in its context | — | — | — |
 | 4. Session | `_authenticated` route: `await session.ready()` | `bootstrapSession()` | placeholder of the screen being opened | error inside the layout, top bar still works |
 | 5. Screen data | route `loader`, e.g. `/encounters` | `apiClient.listEncounters()` | that route's `pendingComponent` | that route's `errorComponent` |
 | 6. Part of a screen | `<Await>` on a promise the loader didn't await | e.g. an encounter's note | `<NotePlaceholder />` | an `ErrorBoundary` around it, with Retry |
