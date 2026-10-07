@@ -15,7 +15,7 @@ npm test               # unit tests (Vitest)
 npm run test:e2e       # key flows in a browser (Playwright, starts the dev server)
 ```
 
-Most tests are unit tests of the services, next to them (`*.test.ts`): they run without rendering anything, and get fakes for their dependencies ([`src/test/fakes.ts`](src/test/fakes.ts)). The few Playwright tests in [`e2e/`](e2e) cover the key flows end to end: signing in and out, browsing encounters, saving preferences, and recovering from failures.
+Most tests are unit tests of the services, next to them (`*.test.ts`): they run without rendering anything, and get mocks for their dependencies ([`src/test/mocks.ts`](src/test/mocks.ts)). The few Playwright tests in [`e2e/`](e2e) cover the key flows end to end: signing in and out, browsing encounters, saving preferences, and recovering from failures.
 
 ## Service types
 

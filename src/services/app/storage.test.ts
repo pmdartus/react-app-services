@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { settle } from '#/test/timers'
 import { createStorageService } from './storage'
 
 describe('storage', () => {
@@ -8,9 +9,7 @@ describe('storage', () => {
 
   async function init() {
     const storage = createStorageService()
-    const ready = storage.init()
-    await vi.runAllTimersAsync()
-    await ready
+    await settle(storage.init())
     return storage
   }
 
@@ -38,11 +37,7 @@ describe('storage', () => {
 
   it('fails to init on corrupted data', async () => {
     localStorage.setItem('demo:broken', '{not json')
-    const storage = createStorageService()
-    const ready = storage.init()
-    const assertion = expect(ready).rejects.toThrow(SyntaxError)
-    await vi.runAllTimersAsync()
-    await assertion
+    await expect(init()).rejects.toThrow(SyntaxError)
   })
 
   it('forgets cached values once disposed', async () => {

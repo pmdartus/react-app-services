@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fakeStorage, testUser } from '#/test/fakes'
+import { testUser } from '#/test/fixtures'
+import { mockStorage } from '#/test/mocks'
+import { settle } from '#/test/timers'
 import { createAuthService } from './auth'
 
 describe('auth', () => {
@@ -7,25 +9,20 @@ describe('auth', () => {
     vi.useFakeTimers() // skip the fake network latency
   })
 
-  async function settle<T>(promise: Promise<T>): Promise<T> {
-    await vi.runAllTimersAsync()
-    return promise
-  }
-
   it('starts signed out when nothing is stored', async () => {
-    const auth = createAuthService({ storage: fakeStorage() })
+    const auth = createAuthService({ storage: mockStorage() })
     await settle(auth.init())
     expect(auth.getState()).toEqual({ status: 'signedOut' })
   })
 
   it('restores the stored user on init', async () => {
-    const auth = createAuthService({ storage: fakeStorage({ 'auth.user': testUser }) })
+    const auth = createAuthService({ storage: mockStorage({ 'auth.user': testUser }) })
     await settle(auth.init())
     expect(auth.getState()).toEqual({ status: 'signedIn', user: testUser })
   })
 
   it('signs in any email, derives a display name and persists the user', async () => {
-    const storage = fakeStorage()
+    const storage = mockStorage()
     const auth = createAuthService({ storage })
 
     const user = await settle(auth.signIn('jean-luc.picard@clinic.example'))
@@ -36,19 +33,18 @@ describe('auth', () => {
   })
 
   it('ignores a sign-in superseded by a later one', async () => {
-    const auth = createAuthService({ storage: fakeStorage() })
+    const auth = createAuthService({ storage: mockStorage() })
 
     const first = auth.signIn('first@clinic.example')
     const second = auth.signIn('second@clinic.example')
-    await vi.runAllTimersAsync()
 
-    expect(await first).toBeNull()
-    expect(await second).toMatchObject({ email: 'second@clinic.example' })
+    expect(await settle(first)).toBeNull()
+    expect(await settle(second)).toMatchObject({ email: 'second@clinic.example' })
     expect(auth.getState()).toMatchObject({ user: { email: 'second@clinic.example' } })
   })
 
   it('cancels an in-flight sign-in on sign-out', async () => {
-    const storage = fakeStorage()
+    const storage = mockStorage()
     const auth = createAuthService({ storage })
 
     const signIn = auth.signIn('claire@clinic.example')
@@ -60,7 +56,7 @@ describe('auth', () => {
   })
 
   it('forgets the stored user on sign-out', async () => {
-    const storage = fakeStorage({ 'auth.user': testUser })
+    const storage = mockStorage({ 'auth.user': testUser })
     const auth = createAuthService({ storage })
     await settle(auth.init())
 

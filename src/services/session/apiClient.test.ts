@@ -1,16 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { testUser } from '#/test/fakes'
+import { testUser } from '#/test/fixtures'
+import { settle } from '#/test/timers'
 import { createApiClient } from './apiClient'
 
 describe('apiClient', () => {
   beforeEach(() => {
     vi.useFakeTimers() // skip the fake network latency
   })
-
-  async function settle<T>(promise: Promise<T>): Promise<T> {
-    await vi.runAllTimersAsync()
-    return promise
-  }
 
   it('lists encounters without their notes', async () => {
     const api = createApiClient({ user: testUser })
@@ -57,12 +53,10 @@ describe('apiClient', () => {
   it('refuses requests once disposed, in-flight ones included', async () => {
     const api = createApiClient({ user: testUser })
     const inFlight = api.listEncounters()
-    const assertion = expect(inFlight).rejects.toThrow('apiClient disposed (GET /encounters)')
 
     api.dispose()
-    await vi.runAllTimersAsync()
 
-    await assertion
+    await expect(settle(inFlight)).rejects.toThrow('apiClient disposed (GET /encounters)')
     await expect(api.getSettings()).rejects.toThrow('apiClient disposed (GET /settings)')
   })
 })

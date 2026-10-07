@@ -1,114 +1,101 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fakeNotifier, fakeReportError, fakeStorage, testUser } from '#/test/fakes'
-import type { Session } from '../session/session'
-import type { AuthService, AuthState, User } from './auth'
+import { testUser } from '#/test/fixtures'
+import { mockNotifier, mockReportError, mockStorage } from '#/test/mocks'
+import { settle } from '#/test/timers'
+import { createAuthService } from './auth'
 import { createSessionHost } from './sessionHost'
 
-// The host's job is when sessions open and close, not what they contain: replace them with stubs.
-vi.mock('../session/session', () => ({
-  createSession: vi.fn(({ user }: { user: User }): Session => ({
-    user,
-    init: vi.fn(async () => {}),
-    ready: vi.fn(),
-    retry: vi.fn(),
-    dispose: vi.fn(async () => {}),
-  })),
-}))
+/*
+ * With real sessions: the host only knows them through their public API, and so does this test.
+ * A session's services are disposed exactly when its `apiClient` starts refusing requests.
+ */
 
-function fakeAuth(initial: AuthState = { status: 'signedOut' }): AuthService {
-  let state = initial
-  return {
-    init: vi.fn(async () => {}),
-    getState: () => state,
-    signIn: vi.fn(async (email: string) => {
-      const user = { ...testUser, id: email, email }
-      state = { status: 'signedIn', user }
-      return user
-    }),
-    signOut: vi.fn(() => void (state = { status: 'signedOut' })),
-    dispose: vi.fn(),
-  }
-}
-
-function setup(auth = fakeAuth()) {
-  const host = createSessionHost({ auth, storage: fakeStorage(), notifier: fakeNotifier(), reportError: fakeReportError() })
+async function setup(stored: Record<string, unknown> = {}) {
+  const storage = mockStorage(stored)
+  const auth = createAuthService({ storage })
+  await settle(auth.init())
+  const host = createSessionHost({ auth, storage, notifier: mockNotifier(), reportError: mockReportError() })
+  await host.init()
   return { host, auth }
 }
 
+/** The services of the current session, once loaded. */
+function currentServices(host: Awaited<ReturnType<typeof setup>>['host']) {
+  return settle(host.current()!.ready())
+}
+
 describe('sessionHost', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.useFakeTimers() // skip the fake latencies
+  })
 
   it('has no session while signed out', async () => {
-    const { host } = setup()
-    await host.init()
+    const { host } = await setup()
     expect(host.current()).toBeNull()
   })
 
   it('reopens the session of the user restored by auth', async () => {
-    const { host } = setup(fakeAuth({ status: 'signedIn', user: testUser }))
-    await host.init()
+    const { host } = await setup({ 'auth.user': testUser })
 
     expect(host.current()?.user).toEqual(testUser)
-    expect(host.current()?.init).toHaveBeenCalledOnce()
+    await expect(currentServices(host)).resolves.toMatchObject({ apiClient: expect.anything() })
   })
 
   it('opens a session on sign-in, replacing the previous one', async () => {
-    const { host } = setup()
+    const { host } = await setup()
 
-    await host.signIn('first@clinic.example')
-    const first = host.current()!
-    expect(first.user.email).toBe('first@clinic.example')
+    await settle(host.signIn('first@clinic.example'))
+    const first = await currentServices(host)
 
-    await host.signIn('second@clinic.example')
-    expect(host.current()!.user.email).toBe('second@clinic.example')
-    expect(first.dispose).toHaveBeenCalledOnce()
+    await settle(host.signIn('second@clinic.example'))
+    expect(host.current()?.user.email).toBe('second@clinic.example')
+    await expect(settle(first.apiClient.listEncounters())).rejects.toThrow('apiClient disposed')
   })
 
-  it('opens nothing when auth reports the sign-in was superseded', async () => {
-    const auth = fakeAuth()
-    vi.mocked(auth.signIn).mockResolvedValueOnce(null)
-    const { host } = setup(auth)
+  it('opens nothing when a sign-out supersedes the sign-in', async () => {
+    const { host } = await setup()
 
-    await host.signIn('late@clinic.example')
+    const signIn = host.signIn('late@clinic.example')
+    await host.signOut()
+    await settle(signIn)
 
     expect(host.current()).toBeNull()
   })
 
   it('on sign-out, hides the session before beforeDispose runs, and disposes it after', async () => {
-    const { host, auth } = setup()
-    await host.signIn('claire@clinic.example')
-    const session = host.current()!
+    const { host, auth } = await setup()
+    await settle(host.signIn('claire@clinic.example'))
+    const services = await currentServices(host)
 
-    const seen: unknown[] = []
     await host.signOut({
       beforeDispose: async () => {
-        seen.push(host.current(), auth.getState().status, vi.mocked(session.dispose).mock.calls.length)
+        expect(host.current()).toBeNull()
+        expect(auth.getState().status).toBe('signedOut')
+        await expect(settle(services.apiClient.listEncounters())).resolves.not.toHaveLength(0) // still usable
       },
     })
 
-    expect(seen).toEqual([null, 'signedOut', 0])
-    expect(session.dispose).toHaveBeenCalledOnce()
+    await expect(settle(services.apiClient.listEncounters())).rejects.toThrow('apiClient disposed')
   })
 
   it('disposes the session even if beforeDispose throws', async () => {
-    const { host } = setup()
-    await host.signIn('claire@clinic.example')
-    const session = host.current()!
+    const { host } = await setup()
+    await settle(host.signIn('claire@clinic.example'))
+    const services = await currentServices(host)
 
-    await expect(host.signOut({ beforeDispose: () => Promise.reject(new Error('navigation failed')) })).rejects.toThrow(
-      'navigation failed',
-    )
-    expect(session.dispose).toHaveBeenCalledOnce()
+    const signOut = host.signOut({ beforeDispose: () => Promise.reject(new Error('navigation failed')) })
+
+    await expect(signOut).rejects.toThrow('navigation failed')
+    await expect(settle(services.apiClient.listEncounters())).rejects.toThrow('apiClient disposed')
   })
 
   it('closes the current session when disposed', async () => {
-    const { host } = setup()
-    await host.signIn('claire@clinic.example')
-    const session = host.current()!
+    const { host } = await setup({ 'auth.user': testUser })
+    const services = await currentServices(host)
 
     await host.dispose()
 
     expect(host.current()).toBeNull()
-    expect(session.dispose).toHaveBeenCalledOnce()
+    await expect(settle(services.apiClient.listEncounters())).rejects.toThrow('apiClient disposed')
   })
 })

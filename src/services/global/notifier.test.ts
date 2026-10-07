@@ -1,10 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { initNotifier, notifier } from './notifier'
 
-// A module singleton: created once for this file.
-initNotifier({ autoDismissMs: 1000 })
-
 describe('notifier', () => {
+  // A module singleton: created once for this file.
+  beforeAll(() => initNotifier({ autoDismissMs: 1000 }))
+
   it('can only be initialized once', () => {
     expect(() => initNotifier({ autoDismissMs: 1000 })).toThrow('already initialized')
   })

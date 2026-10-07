@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fakeNotifier, fakeReportError, fakeStorage, testUser } from '#/test/fakes'
+import { testUser } from '#/test/fixtures'
+import { mockNotifier, mockReportError, mockStorage } from '#/test/mocks'
+import { settle } from '#/test/timers'
 import { bootstrapSession } from './bootstrapSession'
 
 describe('bootstrapSession', () => {
@@ -7,17 +9,12 @@ describe('bootstrapSession', () => {
     vi.useFakeTimers() // skip the fake network latency
   })
 
-  async function settle<T>(promise: Promise<T>): Promise<T> {
-    await vi.runAllTimersAsync()
-    return promise
-  }
-
-  function deps(storage = fakeStorage()) {
-    return { user: testUser, storage, notifier: fakeNotifier(), reportError: fakeReportError() }
+  function deps(storage = mockStorage()) {
+    return { user: testUser, storage, notifier: mockNotifier(), reportError: mockReportError() }
   }
 
   it('resolves with initialized services', async () => {
-    const storage = fakeStorage({ [`userSettings.${testUser.id}`]: { noteLanguage: 'fr' } })
+    const storage = mockStorage({ [`userSettings.${testUser.id}`]: { noteLanguage: 'fr' } })
 
     const services = await settle(bootstrapSession(deps(storage)))
 
@@ -34,14 +31,11 @@ describe('bootstrapSession', () => {
   })
 
   it('rejects when a service fails to initialize', async () => {
-    const storage = fakeStorage()
+    const storage = mockStorage()
     storage.get = () => {
       throw new Error('storage unavailable')
     }
 
-    const bootstrap = bootstrapSession(deps(storage))
-    const assertion = expect(bootstrap).rejects.toThrow('storage unavailable')
-    await vi.runAllTimersAsync()
-    await assertion
+    await expect(settle(bootstrapSession(deps(storage)))).rejects.toThrow('storage unavailable')
   })
 })

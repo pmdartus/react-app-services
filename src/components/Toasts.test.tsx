@@ -1,12 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { initNotifier, notifier } from '#/services/global/notifier'
 import { Toasts } from './Toasts'
 
-initNotifier({ autoDismissMs: 60_000 })
-
 describe('Toasts', () => {
+  // A module singleton: created once for this file.
+  beforeAll(() => initNotifier({ autoDismissMs: 60_000 }))
+
   it('shows what services notify, until dismissed', async () => {
     render(<Toasts />)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()

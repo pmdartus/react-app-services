@@ -1,25 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { deferred, fakeNotifier, fakeReportError, fakeStorage, testUser } from '#/test/fakes'
+import { testUser } from '#/test/fixtures'
+import { mockNotifier, mockReportError, mockStorage } from '#/test/mocks'
 import { bootstrapSession, type SessionServices } from './bootstrapSession'
 import { createSession } from './session'
 
 // What the session decides is when to bootstrap, retry or discard: control each bootstrap by hand.
 vi.mock('./bootstrapSession', () => ({ bootstrapSession: vi.fn() }))
 
-function fakeServices(): SessionServices {
+function mockServices(): SessionServices {
   return { apiClient: {} as SessionServices['apiClient'], userSettings: {} as SessionServices['userSettings'], dispose: vi.fn() }
 }
 
 /** Each call to `bootstrapSession` returns the next of these, settled by the test. */
 function nextBootstraps(count: number) {
-  const attempts = Array.from({ length: count }, () => deferred<SessionServices>())
+  const attempts = Array.from({ length: count }, () => Promise.withResolvers<SessionServices>())
   for (const attempt of attempts) vi.mocked(bootstrapSession).mockReturnValueOnce(attempt.promise)
   return attempts
 }
 
 function setup() {
-  const reportError = fakeReportError()
-  const session = createSession({ user: testUser, storage: fakeStorage(), notifier: fakeNotifier(), reportError })
+  const reportError = mockReportError()
+  const session = createSession({ user: testUser, storage: mockStorage(), notifier: mockNotifier(), reportError })
   return { session, reportError }
 }
 
@@ -28,7 +29,7 @@ describe('session', () => {
 
   it('bootstraps once, and hands out the same services', async () => {
     const [attempt] = nextBootstraps(1)
-    const services = fakeServices()
+    const services = mockServices()
     const { session } = setup()
 
     const init = session.init()
@@ -43,7 +44,7 @@ describe('session', () => {
 
   it('reports a failed bootstrap, and retries it on demand', async () => {
     const [failed, retried] = nextBootstraps(2)
-    const services = fakeServices()
+    const services = mockServices()
     const { session, reportError } = setup()
 
     failed.reject(new Error('settings unavailable'))
@@ -64,14 +65,14 @@ describe('session', () => {
     session.retry()
 
     expect(session.ready()).toBe(ready)
-    attempt.resolve(fakeServices())
+    attempt.resolve(mockServices())
     await ready
     expect(bootstrapSession).toHaveBeenCalledOnce()
   })
 
   it('discards services that finish loading after sign-out', async () => {
     const [attempt] = nextBootstraps(1)
-    const services = fakeServices()
+    const services = mockServices()
     const { session, reportError } = setup()
     const ready = session.ready()
 
@@ -85,7 +86,7 @@ describe('session', () => {
 
   it('disposes its services', async () => {
     const [attempt] = nextBootstraps(1)
-    const services = fakeServices()
+    const services = mockServices()
     const { session } = setup()
     attempt.resolve(services)
     await session.init()

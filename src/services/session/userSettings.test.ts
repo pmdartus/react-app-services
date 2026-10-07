@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fakeNotifier, fakeReportError, fakeStorage } from '#/test/fakes'
+import { mockNotifier, mockReportError, mockStorage } from '#/test/mocks'
 import type { ApiClient, UserSettings } from './apiClient'
 import { createUserSettingsService } from './userSettings'
 
 const REMOTE: UserSettings = { noteLanguage: 'en', noteTemplate: 'soap' }
 
-function fakeApiClient(): ApiClient {
+function mockApiClient(): ApiClient {
   return {
     listEncounters: vi.fn(),
     getEncounterNote: vi.fn(),
@@ -18,10 +18,10 @@ function fakeApiClient(): ApiClient {
 function setup(stored: Record<string, unknown> = {}) {
   const deps = {
     userId: 'claire',
-    apiClient: fakeApiClient(),
-    storage: fakeStorage(stored),
-    notifier: fakeNotifier(),
-    reportError: fakeReportError(),
+    apiClient: mockApiClient(),
+    storage: mockStorage(stored),
+    notifier: mockNotifier(),
+    reportError: mockReportError(),
   }
   return { userSettings: createUserSettingsService(deps), ...deps }
 }
